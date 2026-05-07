@@ -6,6 +6,8 @@ Circular arc gauges for CPU and GPU metrics, with smooth 60fps animation, a roll
 
 ![SysGauge preview](preview.png)
 
+![SysGauge with settings sidebar](preview2.png)
+
 ## Gauges
 
 | Row | Gauge | Source |

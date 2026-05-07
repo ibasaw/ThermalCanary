@@ -178,32 +178,49 @@ class SysGauge(QWidget):
 
     def _move_to_screen(self, idx: int):
         screens = QApplication.instance().screens()
-        screen = screens[min(idx, len(screens) - 1)]
-        geo = screen.availableGeometry()
+        if not screens:
+            return
+        screen = screens[min(max(idx, 0), len(screens) - 1)]
+        geo = screen.availableGeometry()  # orientation-aware
 
+        win_id = hex(int(self.winId()))
+
+        # Centered rect sized to 60% of the target screen — works for any
+        # orientation (landscape or portrait) and avoids Mutter's
+        # "fills screen → strip decorations" heuristic.
+        w = max(640, min(1200, int(geo.width()  * 0.6)))
+        h = max(480, min(900,  int(geo.height() * 0.6)))
+        x = geo.x() + (geo.width()  - w) // 2
+        y = geo.y() + (geo.height() - h) // 2
+
+        def _run(args):
+            return subprocess.run(
+                args, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ).returncode
+
+        # Stage 1: clear maximized state
         self.showNormal()
-        self.setGeometry(geo.x(), geo.y(), 800, 600)
+        _run(['wmctrl', '-i', '-r', win_id,
+              '-b', 'remove,maximized_vert,maximized_horz'])
 
-        win_id = int(self.winId())
+        def _move():
+            # Stage 2: move via wmctrl -e (crosses monitor boundaries reliably)
+            rc = _run(['wmctrl', '-i', '-r', win_id, '-e', f'0,{x},{y},{w},{h}'])
+            if rc != 0:
+                self.setGeometry(x, y, w, h)
 
-        def _maximize():
-            try:
-                subprocess.run(
-                    ['wmctrl', '-i', '-r', hex(win_id),
-                     '-b', 'remove,maximized_vert,maximized_horz'],
-                    check=False)
-                subprocess.run(
-                    ['wmctrl', '-i', '-r', hex(win_id),
-                     '-e', f'0,{geo.x()},{geo.y()},{geo.width()},{geo.height()}'],
-                    check=False)
-                subprocess.run(
-                    ['wmctrl', '-i', '-r', hex(win_id),
-                     '-b', 'add,maximized_vert,maximized_horz'],
-                    check=False)
-            except FileNotFoundError:
-                pass
+            def _maximize():
+                rc2 = _run(['wmctrl', '-i', '-r', win_id,
+                            '-b', 'add,maximized_vert,maximized_horz'])
+                if rc2 != 0:
+                    self.showMaximized()
 
-        QTimer.singleShot(300, _maximize)
+            # Stage 3: maximize after Mutter re-associates window with new monitor
+            QTimer.singleShot(400, _maximize)
+
+        # Let unmaximize settle before moving
+        QTimer.singleShot(200, _move)
 
     def closeEvent(self, event):
         self._config.save_now()
