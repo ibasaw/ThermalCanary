@@ -89,11 +89,21 @@ class SettingsSidebar(QWidget):
         for i, s in enumerate(screens):
             g = s.availableGeometry()
             self._screen_combo.addItem(f'Monitor {i + 1}  ({g.width()}×{g.height()})')
-        self._screen_combo.setCurrentIndex(
-            min(cfg.get('screen_index'), len(screens) - 1))
+        si = cfg.get('screen_index')
+        si = si if isinstance(si, int) and si >= 0 else 0
+        self._screen_combo.setCurrentIndex(min(si, len(screens) - 1))
         self._screen_combo.currentIndexChanged.connect(
             lambda i: cfg.set('screen_index', i))
         form.addRow('Monitor', self._screen_combo)
+
+        self._set_default_btn = QPushButton('Set as default')
+        self._set_default_btn.setStyleSheet(
+            'QPushButton { background:#2d2850; border:1px solid #443e70; '
+            'border-radius:4px; padding:4px 8px; color:#aaa; font-size:11px; }'
+            'QPushButton:hover { background:#3d3870; color:#fff; }')
+        self._set_default_btn.clicked.connect(self._save_default_monitor)
+        self._update_default_label()
+        form.addRow('', self._set_default_btn)
 
         # Sampling
         self._section(form, 'Sampling')
@@ -137,13 +147,27 @@ class SettingsSidebar(QWidget):
         reset_btn.clicked.connect(self._reset)
         outer.addWidget(reset_btn)
 
+    def _save_default_monitor(self):
+        idx = self._screen_combo.currentIndex()
+        self._config.set('default_screen_index', idx)
+        self._update_default_label()
+
+    def _update_default_label(self):
+        idx = self._config.get('default_screen_index')
+        self._set_default_btn.setText(
+            f'Set as default  (current default: Monitor {idx + 1})')
+
     def _reset(self):
         cfg = self._config
+        # Preserve user's saved default monitor — reset everything else
+        saved_default = cfg.get('default_screen_index')
         for k, v in DEFAULTS.items():
             cfg.set(k, v)
+        cfg.set('default_screen_index', saved_default)
+        cfg.set('screen_index', saved_default)
         self._poll_spin.setValue(DEFAULTS['poll_ms'])
         self._smooth_spin.setValue(DEFAULTS['smooth_n'])
         for key, btn in self._color_btns.items():
             btn.set_color(DEFAULTS[key])
-        idx = min(DEFAULTS['screen_index'], self._screen_combo.count() - 1)
+        idx = min(saved_default, self._screen_combo.count() - 1)
         self._screen_combo.setCurrentIndex(idx)

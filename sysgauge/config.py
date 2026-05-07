@@ -5,8 +5,9 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 DEFAULTS = {
-    'screen_index': 2,
-    'poll_ms':      1000,
+    'screen_index':         0,
+    'default_screen_index': None,
+    'poll_ms':              1000,
     'smooth_n':     5,
     'bg_color':     '#252040',
     'inner_color':  '#1e1a35',
@@ -29,6 +30,16 @@ class Config(QObject):
         self._save_timer.setSingleShot(True)
         self._save_timer.setInterval(500)
         self._save_timer.timeout.connect(self._write)
+
+    def clamp_screen_indices(self, screen_count: int) -> None:
+        if screen_count < 1:
+            return
+        si = self.get('screen_index')
+        if not isinstance(si, int) or si < 0 or si >= screen_count:
+            self.set('screen_index', 0)
+        dsi = self.get('default_screen_index')
+        if dsi is None or not isinstance(dsi, int) or dsi < 0 or dsi >= screen_count:
+            self.set('default_screen_index', self.get('screen_index'))
 
     def get(self, key):
         return self._data.get(key, DEFAULTS[key])

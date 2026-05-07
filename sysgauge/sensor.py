@@ -31,6 +31,7 @@ class SensorWorker(QObject):
         self._timer.start(self._config.get('poll_ms'))
         QTimer.singleShot(400, self._poll)
 
+    @pyqtSlot()
     def stop(self):
         if self._timer:
             self._timer.stop()

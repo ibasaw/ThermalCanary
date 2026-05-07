@@ -1,21 +1,23 @@
 # IbaSaW SysGauge — configuration
 # Installed to: ~/.config/sysgauge/config.yaml
-# Changes take effect on next launch.
+# Edited live by the Settings sidebar — you can also edit this file by hand.
 
-# Monitor index to display on (0 = first monitor, 1 = second, 2 = third...)
-screen_index: 2
+# Monitor to display on (0 = primary, 1 = second, 2 = third...).
+# Defaults to your primary monitor. Set via the Settings sidebar.
+# screen_index: 0
 
-# Sensor poll interval in milliseconds (lower = more responsive, higher = less CPU load)
+# Monitor to return to when "Reset to defaults" is pressed.
+# Set via the "Set as default" button in the Settings sidebar.
+# default_screen_index: 0
+
+# Sensor poll interval in milliseconds (lower = more responsive, higher = less CPU)
 poll_ms: 1000
 
 # Rolling average window: number of samples averaged to smooth noisy sensors
 smooth_n: 5
 
-# Colors — must be quoted hex strings
+# Colors — hex strings
 bg_color:    "#252040"   # window background
 inner_color: "#1e1a35"   # gauge inner circle
 track_color: "#332e55"   # arc track (unfilled portion)
 tick_color:  "#3d3860"   # tick marks
-
-# Gauge border radius (px)
-panel_radius: 18

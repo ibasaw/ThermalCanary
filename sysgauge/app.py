@@ -188,8 +188,10 @@ class SysGauge(QWidget):
         # Centered rect sized to 60% of the target screen — works for any
         # orientation (landscape or portrait) and avoids Mutter's
         # "fills screen → strip decorations" heuristic.
-        w = max(640, min(1200, int(geo.width()  * 0.6)))
-        h = max(480, min(900,  int(geo.height() * 0.6)))
+        # w/h are capped to geo dimensions so rotated/narrow monitors
+        # (e.g. 480px wide after 90° rotation) never push x off-screen.
+        w = min(geo.width(),  max(640, min(1200, int(geo.width()  * 0.6))))
+        h = min(geo.height(), max(480, min(900,  int(geo.height() * 0.6))))
         x = geo.x() + (geo.width()  - w) // 2
         y = geo.y() + (geo.height() - h) // 2
 
@@ -224,7 +226,11 @@ class SysGauge(QWidget):
 
     def closeEvent(self, event):
         self._config.save_now()
-        self._worker.stop()
+        # stop() must run in the worker thread (QTimer lives there).
+        # BlockingQueuedConnection blocks until the slot finishes.
+        QMetaObject.invokeMethod(
+            self._worker, 'stop',
+            Qt.ConnectionType.BlockingQueuedConnection)
         self._thread.quit()
         self._thread.wait()
         super().closeEvent(event)
@@ -239,20 +245,23 @@ class SysGauge(QWidget):
         screen = screens[min(int(self._config.get('screen_index')), len(screens) - 1)]
         geo = screen.availableGeometry()
 
-        # Place on correct screen before show
-        self.setGeometry(geo)
+        # Show a modest centered window — NOT full screen size.
+        # setGeometry(full availableGeometry) makes the WM add title bar on top
+        # and push the bottom off-screen. Let wmctrl handle the final maximize.
+        w = min(geo.width(),  max(640, int(geo.width()  * 0.6)))
+        h = min(geo.height(), max(480, int(geo.height() * 0.6)))
+        self.setGeometry(
+            geo.x() + (geo.width()  - w) // 2,
+            geo.y() + (geo.height() - h) // 2,
+            w, h)
         self.show()
 
-        # Qt's showMaximized/setWindowState are silently dropped by Mutter
-        # for unfocused windows on secondary monitors. Use wmctrl to send
-        # the _NET_WM_STATE_MAXIMIZED ClientMessage from a proper X client.
         def _wmctrl_maximize():
             win_id = hex(int(self.winId()))
             result = subprocess.run(
                 ['wmctrl', '-i', '-r', win_id, '-b', 'add,maximized_vert,maximized_horz'],
                 check=False)
             if result.returncode != 0:
-                # wmctrl not available — fall back to Qt (may crop by title bar height)
                 self.showMaximized()
 
         QTimer.singleShot(300, _wmctrl_maximize)
@@ -279,6 +288,7 @@ def main():
     app.setWindowIcon(QIcon.fromTheme('sysgauge', QIcon(str(icon_path))))
 
     config = Config()
+    config.clamp_screen_indices(len(app.screens()))
     win = SysGauge(config)
     win.place_on_screen()
     sys.exit(app.exec())
