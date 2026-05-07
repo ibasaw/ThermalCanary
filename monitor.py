@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IbaSaW IbaSaW SysGauge — Premium Hardware Monitor
+IbaSaW SysGauge — Premium Hardware Monitor
 GPU via pynvml. CPU temp/usage stabilised with 5-sample rolling average.
 """
 
@@ -240,7 +240,7 @@ class Gauge(QWidget):
 class SysGauge(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('SysGauge')
+        self.setWindowTitle('IbaSaW SysGauge')
         self.setWindowFlags(Qt.WindowType.Window)
         self._drag_pos = None
 
