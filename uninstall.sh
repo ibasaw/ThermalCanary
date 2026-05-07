@@ -16,7 +16,7 @@ echo ""
 read -r -p "Continue? [y/N] " confirm
 [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 
-pkill -f "sysgauge/monitor.py" 2>/dev/null && echo "→ Stopped running instance" || true
+pkill -f "sysgauge/sysgauge.py" 2>/dev/null && echo "→ Stopped running instance" || true
 
 rm -rf "$DATA_DIR"   && echo "→ Removed $DATA_DIR"
 rm -rf "$CFG_DIR"    && echo "→ Removed $CFG_DIR"

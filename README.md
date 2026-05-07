@@ -45,7 +45,7 @@ The clone folder is only needed to run the installer. You can delete it afterwar
 
 | Path | What |
 |------|------|
-| `~/.local/share/sysgauge/monitor.py` | App script |
+| `~/.local/share/sysgauge/sysgauge.py` | App script |
 | `~/.local/share/sysgauge/venv/` | Python virtual environment |
 | `~/.config/sysgauge/config.yaml` | User configuration |
 | `~/.config/autostart/sysgauge.desktop` | Autostart entry |
@@ -53,7 +53,7 @@ The clone folder is only needed to run the installer. You can delete it afterwar
 ## Launch manually
 
 ```bash
-~/.local/share/sysgauge/venv/bin/python3 ~/.local/share/sysgauge/monitor.py
+~/.local/share/sysgauge/venv/bin/python3 ~/.local/share/sysgauge/sysgauge.py
 ```
 
 ## Configuration

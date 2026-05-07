@@ -16,7 +16,7 @@ from collections import deque
 from PyQt6.QtWidgets import QApplication, QWidget, QGridLayout, QSizePolicy
 from PyQt6.QtCore import (Qt, QTimer, QRectF, QPointF,
                            QThread, QObject, pyqtSignal)
-from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QPainterPath, QLinearGradient
+from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QPainterPath, QLinearGradient, QIcon
 
 # ── Defaults (used when config.yaml is missing or a key is absent) ───────────
 _DEFAULTS = {
@@ -384,7 +384,16 @@ def main():
         print('[SysGauge] Already running — exiting.', file=sys.stderr)
         sys.exit(0)
 
+    from PyQt6.QtGui import QGuiApplication
+    QGuiApplication.setDesktopFileName('sysgauge')   # maps window to sysgauge.desktop on Wayland + X11
+
     app = QApplication(sys.argv)
+    app.setApplicationName('sysgauge')
+    app.setApplicationDisplayName('IbaSaW SysGauge')
+
+    icon_path = Path(os.environ.get('XDG_DATA_HOME', '~/.local/share')).expanduser() / 'sysgauge' / 'sysgauge.png'
+    app.setWindowIcon(QIcon.fromTheme('sysgauge', QIcon(str(icon_path))))
+
     win = SysGauge()
     win.place_on_screen()
     sys.exit(app.exec())
