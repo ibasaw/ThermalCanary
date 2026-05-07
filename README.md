@@ -1,10 +1,14 @@
 # iBaSaW SysGauge
 
-The Linux software for dedicated hardware monitoring screens — like AIDA64's sensor panel, but native to your desktop.  
-6 circular arc gauges (CPU temp, usage, RAM · GPU temp, fan, VRAM) built with PyQt6 and pynvml.  
-Smooth 60fps animation, rolling average stabilisation, dynamic heat colors. Auto-starts on login.  
-**Built for dedicated monitoring screens** — works out of the box on stretched panels (1920×480), small IPS monitors, or any secondary display you use as a permanent hardware panel.  
-**Fully responsive** — gauges scale to any resolution and orientation: ultrawide, portrait, rotated, compact.  
+The Linux software for dedicated hardware monitoring screens — like AIDA64's sensor panel, but native to your desktop.
+
+6 circular arc gauges (CPU temp, usage, RAM · GPU temp, fan, VRAM) built with PyQt6 and pynvml.
+Smooth 60fps animation, rolling average stabilisation, dynamic heat colors. Auto-starts on login.
+
+**Built for dedicated monitoring screens** — works out of the box on stretched panels (1920×480), small IPS monitors, or any secondary display you use as a permanent hardware panel.
+
+**Fully responsive** — gauges scale to any resolution and orientation: ultrawide, portrait, rotated, compact.
+
 **One-command install** — a single `bash install.sh` sets up everything automatically.
 
 ### Dedicated monitoring screen setup
