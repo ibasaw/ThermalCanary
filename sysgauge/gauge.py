@@ -17,7 +17,7 @@ class Gauge(QWidget):
 
     def __init__(self, title: str, unit: str, lo: float, hi: float,
                  color: str, config: Config, warn: float | None = None,
-                 crit: float | None = None, decimals: int = 1):
+                 crit: float | None = None, decimals: int = 0):
         super().__init__()
         self.title    = title
         self.unit     = unit

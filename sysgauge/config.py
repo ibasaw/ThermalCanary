@@ -34,12 +34,12 @@ class Config(QObject):
     def clamp_screen_indices(self, screen_count: int) -> None:
         if screen_count < 1:
             return
-        si = self.get('screen_index')
-        if not isinstance(si, int) or si < 0 or si >= screen_count:
-            self.set('screen_index', 0)
         dsi = self.get('default_screen_index')
         if dsi is None or not isinstance(dsi, int) or dsi < 0 or dsi >= screen_count:
-            self.set('default_screen_index', self.get('screen_index'))
+            dsi = 0
+            self.set('default_screen_index', dsi)
+        # Always start on the default monitor, ignoring last-session screen_index.
+        self.set('screen_index', dsi)
 
     def get(self, key):
         return self._data.get(key, DEFAULTS[key])

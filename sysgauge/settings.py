@@ -64,7 +64,7 @@ class SettingsSidebar(QWidget):
 
         cfg = self._config
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(16, 20, 16, 16)
+        outer.setContentsMargins(16, 48, 16, 16)
         outer.setSpacing(6)
 
         title = QLabel('Settings')
@@ -84,14 +84,12 @@ class SettingsSidebar(QWidget):
 
         # Display
         self._section(form, 'Display')
+        self._screens = QApplication.instance().screens()
         self._screen_combo = QComboBox()
-        screens = QApplication.instance().screens()
-        for i, s in enumerate(screens):
-            g = s.availableGeometry()
-            self._screen_combo.addItem(f'Monitor {i + 1}  ({g.width()}×{g.height()})')
+        self._refresh_combo_items()
         si = cfg.get('screen_index')
         si = si if isinstance(si, int) and si >= 0 else 0
-        self._screen_combo.setCurrentIndex(min(si, len(screens) - 1))
+        self._screen_combo.setCurrentIndex(min(si, len(self._screens) - 1))
         self._screen_combo.currentIndexChanged.connect(
             lambda i: cfg.set('screen_index', i))
         form.addRow('Monitor', self._screen_combo)
@@ -102,7 +100,6 @@ class SettingsSidebar(QWidget):
             'border-radius:4px; padding:4px 8px; color:#aaa; font-size:11px; }'
             'QPushButton:hover { background:#3d3870; color:#fff; }')
         self._set_default_btn.clicked.connect(self._save_default_monitor)
-        self._update_default_label()
         form.addRow('', self._set_default_btn)
 
         # Sampling
@@ -147,15 +144,22 @@ class SettingsSidebar(QWidget):
         reset_btn.clicked.connect(self._reset)
         outer.addWidget(reset_btn)
 
+    def _refresh_combo_items(self):
+        default_idx = self._config.get('default_screen_index')
+        current = self._screen_combo.currentIndex()
+        self._screen_combo.blockSignals(True)
+        self._screen_combo.clear()
+        for i, s in enumerate(self._screens):
+            g = s.availableGeometry()
+            star = '★  ' if i == default_idx else '      '
+            self._screen_combo.addItem(f'{star}Monitor {i + 1}  ({g.width()}×{g.height()})')
+        self._screen_combo.setCurrentIndex(max(current, 0))
+        self._screen_combo.blockSignals(False)
+
     def _save_default_monitor(self):
         idx = self._screen_combo.currentIndex()
         self._config.set('default_screen_index', idx)
-        self._update_default_label()
-
-    def _update_default_label(self):
-        idx = self._config.get('default_screen_index')
-        self._set_default_btn.setText(
-            f'Set as default  (current default: Monitor {idx + 1})')
+        self._refresh_combo_items()
 
     def _reset(self):
         cfg = self._config
@@ -171,3 +175,4 @@ class SettingsSidebar(QWidget):
             btn.set_color(DEFAULTS[key])
         idx = min(saved_default, self._screen_combo.count() - 1)
         self._screen_combo.setCurrentIndex(idx)
+        self._refresh_combo_items()

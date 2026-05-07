@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# IbaSaW SysGauge uninstaller
+# iBaSaW SysGauge uninstaller
 set -euo pipefail
 
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/sysgauge"
@@ -7,7 +7,7 @@ CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sysgauge"
 DESKTOP="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/sysgauge.desktop"
 APPS_ENTRY="$HOME/.local/share/applications/sysgauge.desktop"
 
-echo "=== IbaSaW SysGauge Uninstaller ==="
+echo "=== iBaSaW SysGauge Uninstaller ==="
 echo ""
 echo "This will remove:"
 echo "  $DATA_DIR"

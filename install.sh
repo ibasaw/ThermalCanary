@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# IbaSaW SysGauge installer
+# iBaSaW SysGauge installer
+#
+# Usage:
+#   bash install.sh               — check deps, print any missing, then install app
+#   bash install.sh --install-deps — same but also invoke sudo to install missing system packages
+#
+# The app itself runs entirely as your user. sudo is only used for system
+# package installation, and only when you explicitly pass --install-deps.
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,22 +15,26 @@ CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sysgauge"
 VENV="$DATA_DIR/venv"
 DESKTOP="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/sysgauge.desktop"
 
-echo "=== IbaSaW SysGauge Installer ==="
-echo "→ Project: $PROJECT_DIR"
+AUTO_INSTALL=0
+for arg in "$@"; do
+  [[ "$arg" == "--install-deps" ]] && AUTO_INSTALL=1
+done
 
-# ── Distro detection ─────────────────────────────────────────────────────────
+echo "=== iBaSaW SysGauge Installer ==="
+echo "→ Project: $PROJECT_DIR"
+[[ "$AUTO_INSTALL" == "1" ]] && echo "→ Mode: auto-install system dependencies (sudo will be invoked)"
+
+# ── Distro / package manager detection ───────────────────────────────────────
 if [[ -f /etc/os-release ]]; then
   source /etc/os-release
   DISTRO_ID="${ID:-unknown}"
-  DISTRO_LIKE="${ID_LIKE:-}"
 else
   DISTRO_ID="unknown"
-  DISTRO_LIKE=""
 fi
 
 detect_pkg_manager() {
-  if command -v apt &>/dev/null; then   echo "apt";    return; fi
-  if command -v dnf &>/dev/null; then   echo "dnf";    return; fi
+  if command -v apt    &>/dev/null; then echo "apt";    return; fi
+  if command -v dnf    &>/dev/null; then echo "dnf";    return; fi
   if command -v pacman &>/dev/null; then echo "pacman"; return; fi
   if command -v zypper &>/dev/null; then echo "zypper"; return; fi
   echo "unknown"
@@ -31,104 +42,114 @@ detect_pkg_manager() {
 
 PKG_MGR="$(detect_pkg_manager)"
 
-if [[ "$PKG_MGR" == "unknown" ]]; then
-  echo "WARNING: Unsupported package manager — cannot install system packages automatically." >&2
-  echo "         You may need to install Python 3.10+, python3-venv, and XCB cursor libraries manually." >&2
+# ── NVIDIA driver check (informational only — never installs automatically) ──
+echo ""
+echo "→ Checking NVIDIA driver..."
+
+if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+  GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || echo "unknown")
+  DRIVER_VER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 || echo "unknown")
+  echo "  NVIDIA GPU detected: $GPU_NAME (driver $DRIVER_VER) — GPU gauges enabled."
+else
+  echo "  WARNING: NVIDIA driver not found or not working."
+  echo "  GPU gauges (temperature, fan, VRAM) will show 0. CPU/RAM gauges are unaffected."
+  echo ""
+  echo "  To enable GPU gauges, install the NVIDIA driver for your distro:"
+  case "$PKG_MGR" in
+    apt)    echo "    sudo apt install nvidia-driver" ;;
+    dnf)    echo "    sudo dnf install akmod-nvidia  # requires RPM Fusion Non-Free repo" ;;
+    pacman) echo "    sudo pacman -S nvidia nvidia-utils" ;;
+    zypper) echo "    # See https://en.opensuse.org/SDB:NVIDIA_drivers" ;;
+    *)      echo "    See https://www.nvidia.com/Download/index.aspx" ;;
+  esac
+  echo ""
+  read -r -p "  Continue without GPU support? [Y/n] " confirm
+  [[ "$confirm" =~ ^[Nn]$ ]] && { echo "Aborted."; exit 0; }
 fi
 
-# ── System checks ────────────────────────────────────────────────────────────
-echo "→ Checking system requirements..."
-
-if ! command -v nvidia-smi &>/dev/null; then
-  echo "WARNING: nvidia-smi not found — GPU gauges will show 0." >&2
-  echo "         Install NVIDIA drivers for your distro to enable GPU monitoring." >&2
-fi
-
-# ── System packages ──────────────────────────────────────────────────────────
+# ── System package check ──────────────────────────────────────────────────────
+echo ""
 echo "→ Checking system packages..."
+echo "  Note: coretemp/k10temp (CPU temp sensor) are auto-loaded by the kernel — no manual setup needed."
 
-install_packages_apt() {
-  local missing=()
-  for pkg in python3 python3-venv python3-pip libxcb-cursor0 libxcb-xinerama0 wmctrl; do
-    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" \
-      || missing+=("$pkg")
+MISSING_PKGS=()
+INSTALL_CMD=""
+
+check_and_collect_apt() {
+  local pkgs=(python3 python3-venv python3-pip lm-sensors wmctrl libxcb-cursor0 libxcb-xinerama0)
+  for pkg in "${pkgs[@]}"; do
+    dpkg -s "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    echo ""
-    echo "  The following system packages will be installed via apt:"
-    for pkg in "${missing[@]}"; do echo "    - $pkg"; done
-    echo ""
-    read -r -p "  Proceed? [y/N] " confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
-    sudo apt install -y "${missing[@]}"
-  else
-    echo "  All system packages already installed."
-  fi
+  INSTALL_CMD="sudo apt install ${MISSING_PKGS[*]}"
 }
 
-install_packages_dnf() {
-  local missing=()
-  for pkg in python3 python3-pip xcb-util-cursor libxcb; do
-    rpm -q "$pkg" &>/dev/null || missing+=("$pkg")
+check_and_collect_dnf() {
+  local pkgs=(python3 python3-pip lm_sensors wmctrl xcb-util-cursor libxcb)
+  for pkg in "${pkgs[@]}"; do
+    rpm -q "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    echo ""
-    echo "  The following system packages will be installed via dnf:"
-    for pkg in "${missing[@]}"; do echo "    - $pkg"; done
-    echo ""
-    read -r -p "  Proceed? [y/N] " confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
-    sudo dnf install -y "${missing[@]}"
-  else
-    echo "  All system packages already installed."
-  fi
+  INSTALL_CMD="sudo dnf install ${MISSING_PKGS[*]}"
 }
 
-install_packages_pacman() {
-  local missing=()
-  for pkg in python python-pip xcb-util-cursor; do
-    pacman -Qi "$pkg" &>/dev/null || missing+=("$pkg")
+check_and_collect_pacman() {
+  local pkgs=(python python-pip lm_sensors wmctrl xcb-util-cursor)
+  for pkg in "${pkgs[@]}"; do
+    pacman -Qi "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    echo ""
-    echo "  The following system packages will be installed via pacman:"
-    for pkg in "${missing[@]}"; do echo "    - $pkg"; done
-    echo ""
-    read -r -p "  Proceed? [y/N] " confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
-    sudo pacman -S --noconfirm "${missing[@]}"
-  else
-    echo "  All system packages already installed."
-  fi
+  INSTALL_CMD="sudo pacman -S ${MISSING_PKGS[*]}"
 }
 
-install_packages_zypper() {
-  local missing=()
-  for pkg in python3 python3-pip xcb-util-cursor libxcb1; do
-    rpm -q "$pkg" &>/dev/null || missing+=("$pkg")
+check_and_collect_zypper() {
+  local pkgs=(python3 python3-pip lm-sensors wmctrl xcb-util-cursor libxcb1)
+  for pkg in "${pkgs[@]}"; do
+    rpm -q "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    echo ""
-    echo "  The following system packages will be installed via zypper:"
-    for pkg in "${missing[@]}"; do echo "    - $pkg"; done
-    echo ""
-    read -r -p "  Proceed? [y/N] " confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
-    sudo zypper install -y "${missing[@]}"
-  else
-    echo "  All system packages already installed."
-  fi
+  INSTALL_CMD="sudo zypper install ${MISSING_PKGS[*]}"
 }
 
 case "$PKG_MGR" in
-  apt)    install_packages_apt ;;
-  dnf)    install_packages_dnf ;;
-  pacman) install_packages_pacman ;;
-  zypper) install_packages_zypper ;;
-  *)      echo "  Skipping automatic package install (unsupported distro)." ;;
+  apt)    check_and_collect_apt ;;
+  dnf)    check_and_collect_dnf ;;
+  pacman) check_and_collect_pacman ;;
+  zypper) check_and_collect_zypper ;;
+  *)
+    echo "  WARNING: Unsupported package manager. Install manually:"
+    echo "    Python 3.10+, python3-venv, lm-sensors, wmctrl, XCB cursor libs"
+    ;;
 esac
 
-# Python version check (need 3.10+)
+if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
+  echo ""
+  echo "  Missing system packages: ${MISSING_PKGS[*]}"
+  echo ""
+  if [[ "$AUTO_INSTALL" == "1" ]]; then
+    echo "  Installing via sudo..."
+    case "$PKG_MGR" in
+      apt)
+        sudo apt update -qq
+        sudo apt install -y "${MISSING_PKGS[@]}"
+        ;;
+      dnf)    sudo dnf install -y "${MISSING_PKGS[@]}" ;;
+      pacman) sudo pacman -S --noconfirm "${MISSING_PKGS[@]}" ;;
+      zypper) sudo zypper install -y "${MISSING_PKGS[@]}" ;;
+    esac
+  else
+    echo "  Install them with:"
+    echo "    $INSTALL_CMD"
+    echo ""
+    echo "  Then re-run this installer, or re-run with --install-deps to let it invoke sudo:"
+    echo "    bash install.sh --install-deps"
+    echo ""
+    read -r -p "  Packages not yet installed. Continue anyway? [y/N] " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+  fi
+else
+  echo "  All system packages already installed."
+fi
+
+# ── Python version check ──────────────────────────────────────────────────────
+echo ""
+echo "→ Checking Python version..."
 if ! command -v python3 &>/dev/null; then
   echo "ERROR: python3 not found — install Python 3.10+ and re-run." >&2
   exit 1
@@ -143,6 +164,7 @@ fi
 echo "  Python $PY_VER OK"
 
 # ── App files ────────────────────────────────────────────────────────────────
+echo ""
 echo "→ Copying app to $DATA_DIR..."
 mkdir -p "$DATA_DIR"
 rm -rf "$DATA_DIR/sysgauge"
@@ -164,7 +186,7 @@ mkdir -p "$APPS_DIR"
 cat > "$APPS_DIR/sysgauge.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=IbaSaW SysGauge
+Name=iBaSaW SysGauge
 Comment=Hardware gauge monitor
 Icon=sysgauge
 Exec=$VENV/bin/python3 -m sysgauge
@@ -177,6 +199,7 @@ EOF
 update-desktop-database "$APPS_DIR" 2>/dev/null || true
 
 # ── Python venv + dependencies ───────────────────────────────────────────────
+echo ""
 echo "→ Creating Python virtual environment..."
 python3 -m venv "$VENV"
 
@@ -184,12 +207,22 @@ echo "→ Installing Python dependencies..."
 "$VENV/bin/pip" install -q --upgrade pip
 "$VENV/bin/pip" install -q PyQt6 psutil nvidia-ml-py pyyaml
 
-echo "→ Verifying dependencies..."
-"$VENV/bin/python3" -c "import PyQt6, psutil, pynvml, yaml" \
-  && echo "  All dependencies OK" \
-  || { echo "ERROR: dependency check failed" >&2; exit 1; }
+echo "→ Verifying Python dependencies..."
+"$VENV/bin/python3" -c "
+import sys
+ok = True
+for mod in ('PyQt6', 'psutil', 'pynvml', 'yaml'):
+    try:
+        __import__(mod)
+        print(f'  {mod} OK')
+    except ImportError as e:
+        print(f'  ERROR: {mod} — {e}', file=sys.stderr)
+        ok = False
+sys.exit(0 if ok else 1)
+" || { echo "ERROR: dependency verification failed" >&2; exit 1; }
 
 # ── Config ───────────────────────────────────────────────────────────────────
+echo ""
 echo "→ Installing config..."
 mkdir -p "$CFG_DIR"
 cp -n "$PROJECT_DIR/config.example.yaml" "$CFG_DIR/config.yaml" \
@@ -202,7 +235,7 @@ mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
-Name=IbaSaW SysGauge
+Name=iBaSaW SysGauge
 Comment=Hardware gauge monitor
 Icon=sysgauge
 Exec=bash -c 'sleep 8 && DISPLAY=:1 $VENV/bin/python3 -m sysgauge'
@@ -213,12 +246,14 @@ X-GNOME-Autostart-enabled=true
 StartupNotify=false
 EOF
 
-# ── Launch ───────────────────────────────────────────────────────────────────
+# ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Done! ==="
 echo "  App:       $DATA_DIR/sysgauge/"
 echo "  Config:    $CFG_DIR/config.yaml"
 echo "  Autostart: enabled (8s delay after login)"
+echo ""
+echo "  SysGauge runs entirely as your user — no root needed at runtime."
 echo ""
 echo "→ Launching SysGauge..."
 pkill -f "sysgauge" 2>/dev/null || true

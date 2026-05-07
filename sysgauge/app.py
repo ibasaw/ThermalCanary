@@ -1,9 +1,9 @@
 import os
 import sys
-import subprocess
 from pathlib import Path
 
-from PyQt6.QtWidgets import QApplication, QWidget, QGridLayout, QHBoxLayout, QSizePolicy, QToolButton
+from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QHBoxLayout, QVBoxLayout,
+                             QSizePolicy, QToolButton, QDialog, QLabel, QPushButton)
 from PyQt6.QtCore import (Qt, QTimer, QThread, QPropertyAnimation, QEasingCurve,
                            QMetaObject, Q_ARG, QRectF)
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QIcon, QShortcut, QKeySequence, QGuiApplication
@@ -12,6 +12,59 @@ from sysgauge.config import Config
 from sysgauge.sensor import SensorWorker
 from sysgauge.gauge import Gauge
 from sysgauge.settings import SettingsSidebar, SIDEBAR_W
+
+
+class QuitDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setModal(True)
+
+        wrap = QWidget(self)
+        wrap.setObjectName('wrap')
+        wrap.setStyleSheet(
+            '#wrap { background:#1a1630; border:1px solid #443e70; border-radius:12px; }')
+
+        title = QLabel('Quit SysGauge')
+        title.setStyleSheet('color:#ffffff; font-family:Inter; font-size:14px; font-weight:bold;')
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        msg = QLabel('Close the application?')
+        msg.setStyleSheet('color:#aaaacc; font-family:Inter; font-size:12px;')
+        msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        btn_cancel = QPushButton('Cancel')
+        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.setStyleSheet(
+            'QPushButton { background:#252040; border:1px solid #443e70; border-radius:6px;'
+            ' color:#aaa; font-family:Inter; font-size:12px; padding:6px 20px; }'
+            'QPushButton:hover { background:#2d2850; color:#fff; }')
+        btn_cancel.clicked.connect(self.reject)
+
+        btn_quit = QPushButton('Quit')
+        btn_quit.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_quit.setStyleSheet(
+            'QPushButton { background:#5a1020; border:1px solid #ff2040; border-radius:6px;'
+            ' color:#ff6070; font-family:Inter; font-size:12px; font-weight:bold; padding:6px 20px; }'
+            'QPushButton:hover { background:#7a1828; color:#fff; }')
+        btn_quit.clicked.connect(self.accept)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(btn_quit)
+
+        inner = QVBoxLayout(wrap)
+        inner.setContentsMargins(28, 24, 28, 24)
+        inner.setSpacing(14)
+        inner.addWidget(title)
+        inner.addWidget(msg)
+        inner.addLayout(btn_row)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(wrap)
 
 
 def _contrast_color(hex_bg: str) -> QColor:
@@ -59,7 +112,7 @@ class SysGauge(QWidget):
     def __init__(self, config: Config):
         super().__init__()
         self._config = config
-        self.setWindowTitle('IbaSaW SysGauge')
+        self.setWindowTitle('iBaSaW SysGauge')
         self.setWindowFlags(Qt.WindowType.Window)
 
         outer = QHBoxLayout(self)
@@ -105,15 +158,24 @@ class SysGauge(QWidget):
         self._sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         outer.addWidget(self._sidebar)
 
-        self._gear_btn = QToolButton(self)
-        self._gear_btn.setText('⚙')
-        self._gear_btn.setFixedSize(32, 32)
-        self._gear_btn.setStyleSheet(
+        btn_style = (
             'QToolButton { background:rgba(255,255,255,20); border:none; '
             'border-radius:16px; color:#888; font-size:16px; }'
             'QToolButton:hover { background:rgba(255,255,255,55); color:#fff; }')
+
+        self._gear_btn = QToolButton(self)
+        self._gear_btn.setText('⚙')
+        self._gear_btn.setFixedSize(32, 32)
+        self._gear_btn.setStyleSheet(btn_style)
         self._gear_btn.clicked.connect(self.toggle_settings)
         self._gear_btn.raise_()
+
+        self._close_btn = QToolButton(self)
+        self._close_btn.setText('✕')
+        self._close_btn.setFixedSize(32, 32)
+        self._close_btn.setStyleSheet(btn_style)
+        self._close_btn.clicked.connect(self._confirm_quit)
+        self._close_btn.raise_()
 
         QShortcut(QKeySequence('Ctrl+,'), self, self.toggle_settings)
         QShortcut(QKeySequence('Escape'), self, self._close_settings)
@@ -145,9 +207,17 @@ class SysGauge(QWidget):
         self._anim.setEndValue(0)
         self._anim.start()
 
+    def _confirm_quit(self):
+        dlg = QuitDialog(self)
+        dlg.adjustSize()
+        dlg.move(self.geometry().center() - dlg.rect().center())
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.close()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._gear_btn.move(self.width() - 44, 8)
+        self._gear_btn.move(self.width() - 84, 8)
+        self._close_btn.move(self.width() - 44, 8)
 
     def _on_reading(self, cpu_t, gpu_t, gpu_f, cpu_u, mem, gpu_vram):
         self.g_cpu_t.set_value(cpu_t)
@@ -181,48 +251,22 @@ class SysGauge(QWidget):
         if not screens:
             return
         screen = screens[min(max(idx, 0), len(screens) - 1)]
-        geo = screen.availableGeometry()  # orientation-aware
+        geo = screen.geometry()
 
-        win_id = hex(int(self.winId()))
-
-        # Centered rect sized to 60% of the target screen — works for any
-        # orientation (landscape or portrait) and avoids Mutter's
-        # "fills screen → strip decorations" heuristic.
-        # w/h are capped to geo dimensions so rotated/narrow monitors
-        # (e.g. 480px wide after 90° rotation) never push x off-screen.
-        w = min(geo.width(),  max(640, min(1200, int(geo.width()  * 0.6))))
-        h = min(geo.height(), max(480, min(900,  int(geo.height() * 0.6))))
-        x = geo.x() + (geo.width()  - w) // 2
-        y = geo.y() + (geo.height() - h) // 2
-
-        def _run(args):
-            return subprocess.run(
-                args, check=False,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            ).returncode
-
-        # Stage 1: clear maximized state
+        # showFullScreen() fills the monitor without decorations and bypasses
+        # Mutter's WM_NORMAL_HINTS enforcement (which clamps window height to
+        # minimumSizeHint, breaking placement on short monitors like HDMI-1-1).
+        # Clear min-size first so showNormal() doesn't snap back to a large size.
+        self.setMinimumSize(0, 0)
         self.showNormal()
-        _run(['wmctrl', '-i', '-r', win_id,
-              '-b', 'remove,maximized_vert,maximized_horz'])
 
-        def _move():
-            # Stage 2: move via wmctrl -e (crosses monitor boundaries reliably)
-            rc = _run(['wmctrl', '-i', '-r', win_id, '-e', f'0,{x},{y},{w},{h}'])
-            if rc != 0:
-                self.setGeometry(x, y, w, h)
+        # Migrate to the target QScreen before sizing — Qt6 cross-screen path.
+        handle = self.windowHandle()
+        if handle:
+            handle.setScreen(screen)
 
-            def _maximize():
-                rc2 = _run(['wmctrl', '-i', '-r', win_id,
-                            '-b', 'add,maximized_vert,maximized_horz'])
-                if rc2 != 0:
-                    self.showMaximized()
-
-            # Stage 3: maximize after Mutter re-associates window with new monitor
-            QTimer.singleShot(400, _maximize)
-
-        # Let unmaximize settle before moving
-        QTimer.singleShot(200, _move)
+        self.setGeometry(geo)
+        QTimer.singleShot(50, self.showFullScreen)
 
     def closeEvent(self, event):
         self._config.save_now()
@@ -242,29 +286,10 @@ class SysGauge(QWidget):
 
     def place_on_screen(self):
         screens = QApplication.instance().screens()
-        screen = screens[min(int(self._config.get('screen_index')), len(screens) - 1)]
-        geo = screen.availableGeometry()
-
-        # Show a modest centered window — NOT full screen size.
-        # setGeometry(full availableGeometry) makes the WM add title bar on top
-        # and push the bottom off-screen. Let wmctrl handle the final maximize.
-        w = min(geo.width(),  max(640, int(geo.width()  * 0.6)))
-        h = min(geo.height(), max(480, int(geo.height() * 0.6)))
-        self.setGeometry(
-            geo.x() + (geo.width()  - w) // 2,
-            geo.y() + (geo.height() - h) // 2,
-            w, h)
+        idx = min(int(self._config.get('screen_index')), len(screens) - 1)
         self.show()
-
-        def _wmctrl_maximize():
-            win_id = hex(int(self.winId()))
-            result = subprocess.run(
-                ['wmctrl', '-i', '-r', win_id, '-b', 'add,maximized_vert,maximized_horz'],
-                check=False)
-            if result.returncode != 0:
-                self.showMaximized()
-
-        QTimer.singleShot(300, _wmctrl_maximize)
+        # Let the WM map the window before migrating it to the target screen.
+        QTimer.singleShot(300, lambda: self._move_to_screen(idx))
 
 
 def main():
@@ -281,7 +306,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName('sysgauge')
-    app.setApplicationDisplayName('IbaSaW SysGauge')
+    app.setApplicationDisplayName('iBaSaW SysGauge')
 
     icon_path = (Path(os.environ.get('XDG_DATA_HOME', '~/.local/share')).expanduser()
                  / 'sysgauge' / 'assets' / 'sysgauge.png')
