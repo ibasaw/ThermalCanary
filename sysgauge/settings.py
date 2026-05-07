@@ -37,6 +37,8 @@ class SettingsSidebar(QWidget):
         self._worker = worker
         self.setMinimumWidth(0)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
         self._build_ui()
 
     def _section(self, form: QFormLayout, text: str):
@@ -53,6 +55,14 @@ class SettingsSidebar(QWidget):
             QSpinBox, QComboBox {
                 background: #252040; border: 1px solid #443e70;
                 border-radius: 4px; padding: 4px 8px; color: #eee; }
+            QComboBox::drop-down { border: none; width: 20px; }
+            QComboBox::down-arrow { width: 10px; height: 10px; }
+            QComboBox QAbstractItemView {
+                background: #252040; color: #eee;
+                border: 1px solid #443e70;
+                selection-background-color: #3d3870;
+                selection-color: #fff;
+                outline: none; }
             QSpinBox::up-button, QSpinBox::down-button { width: 16px; }
             QSlider::groove:horizontal {
                 background: #332e55; height: 4px; border-radius: 2px; }
@@ -151,8 +161,8 @@ class SettingsSidebar(QWidget):
         self._screen_combo.clear()
         for i, s in enumerate(self._screens):
             g = s.availableGeometry()
-            star = '★  ' if i == default_idx else '      '
-            self._screen_combo.addItem(f'{star}Monitor {i + 1}  ({g.width()}×{g.height()})')
+            star = ' ★' if i == default_idx else ''
+            self._screen_combo.addItem(f'Monitor {i + 1}  {g.width()}×{g.height()}{star}')
         self._screen_combo.setCurrentIndex(max(current, 0))
         self._screen_combo.blockSignals(False)
 

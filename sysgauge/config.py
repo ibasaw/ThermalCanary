@@ -1,8 +1,26 @@
 import os
+import re
 import sys
 import yaml
 from pathlib import Path
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+
+_HEX = re.compile(r'^#[0-9a-fA-F]{6}$')
+
+def _is_hex(v): return isinstance(v, str) and bool(_HEX.match(v))
+def _is_screen(v): return isinstance(v, int) and 0 <= v < 32
+
+_VALIDATORS = {
+    'screen_index':         _is_screen,
+    'default_screen_index': lambda v: v is None or _is_screen(v),
+    'poll_ms':              lambda v: isinstance(v, int) and 100 <= v <= 60000,
+    'smooth_n':             lambda v: isinstance(v, int) and 1 <= v <= 100,
+    'panel_radius':         lambda v: isinstance(v, int) and 0 <= v <= 100,
+    'bg_color':             _is_hex,
+    'inner_color':          _is_hex,
+    'track_color':          _is_hex,
+    'tick_color':           _is_hex,
+}
 
 DEFAULTS = {
     'screen_index':         0,
@@ -59,16 +77,26 @@ class Config(QObject):
         try:
             with open(self._path) as f:
                 loaded = yaml.safe_load(f) or {}
-            self._data.update({k: v for k, v in loaded.items() if k in DEFAULTS})
+            for k, v in loaded.items():
+                if k not in DEFAULTS:
+                    continue
+                validator = _VALIDATORS.get(k)
+                if validator and not validator(v):
+                    print(f'[SysGauge] Config: invalid value for {k!r}: {str(v)[:40]!r} — using default',
+                          file=sys.stderr)
+                    continue
+                self._data[k] = v
         except FileNotFoundError:
             print(f'[SysGauge] No config at {self._path} — using defaults', file=sys.stderr)
-        except yaml.YAMLError as e:
-            print(f'[SysGauge] Config parse error: {e} — using defaults', file=sys.stderr)
+        except yaml.YAMLError:
+            print(f'[SysGauge] Config parse error — using defaults', file=sys.stderr)
 
     def _write(self):
         try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self._path.with_suffix('.yaml.tmp')
             tmp.write_text(yaml.safe_dump(self._data, default_flow_style=False))
+            os.chmod(tmp, 0o600)
             tmp.replace(self._path)
-        except Exception as e:
+        except (OSError, yaml.YAMLError) as e:
             print(f'[SysGauge] Config save error: {e}', file=sys.stderr)

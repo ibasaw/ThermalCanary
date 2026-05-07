@@ -6,6 +6,29 @@ from sysgauge.config import Config
 
 ANIM_FPS = 60
 
+_DEFAULT_GRADIENT = [
+    (0.00, QColor('#00aaff')),
+    (0.25, QColor('#39ff14')),
+    (0.65, QColor('#ffd000')),
+    (0.85, QColor('#ff8800')),
+    (1.00, QColor('#ff2020')),
+]
+
+
+def _lerp_hsv(c1: QColor, c2: QColor, t: float) -> QColor:
+    h1, s1, v1, a1 = c1.hsvHueF(), c1.hsvSaturationF(), c1.valueF(), c1.alphaF()
+    h2, s2, v2, a2 = c2.hsvHueF(), c2.hsvSaturationF(), c2.valueF(), c2.alphaF()
+    if h1 < 0: h1 = h2
+    if h2 < 0: h2 = h1
+    if h1 < 0: h1 = h2 = 0.0
+    dh = h2 - h1
+    if dh > 0.5:  dh -= 1.0
+    if dh < -0.5: dh += 1.0
+    h = (h1 + dh * t) % 1.0
+    result = QColor()
+    result.setHsvF(h, s1 + (s2 - s1) * t, v1 + (v2 - v1) * t, a1 + (a2 - a1) * t)
+    return result
+
 
 class Gauge(QWidget):
     _START  = 225
@@ -23,13 +46,14 @@ class Gauge(QWidget):
         self.unit     = unit
         self.lo       = lo
         self.hi       = hi
-        self._base    = QColor(color)
+        self._base    = QColor(color)  # kept for API compat; dynamic color overrides
         self._config  = config
         self.warn     = warn
         self.crit     = crit
         self.decimals = decimals
         self._target  = float(lo)
         self._cur     = float(lo)
+        self._gradient_stops = self._build_stops()
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMinimumSize(140, 140)
@@ -37,6 +61,36 @@ class Gauge(QWidget):
         anim = QTimer(self)
         anim.timeout.connect(self._step)
         anim.start(1000 // ANIM_FPS)
+
+    def _build_stops(self) -> list[tuple[float, QColor]]:
+        span = (self.hi - self.lo) or 1.0
+        if self.warn is not None and self.crit is not None:
+            warn_r = max(0.0, min(1.0, (self.warn - self.lo) / span))
+            crit_r = max(0.0, min(1.0, (self.crit - self.lo) / span))
+            mid_r  = (warn_r + crit_r) / 2
+            return [
+                (0.00,   QColor('#00aaff')),
+                (0.25,   QColor('#39ff14')),
+                (warn_r, QColor('#ffd000')),
+                (mid_r,  QColor('#ff8800')),
+                (crit_r, QColor('#ff2020')),
+            ]
+        return list(_DEFAULT_GRADIENT)
+
+    def _color_for(self, ratio: float) -> QColor:
+        ratio = max(0.0, min(1.0, ratio))
+        stops = self._gradient_stops
+        if ratio <= stops[0][0]:
+            return stops[0][1]
+        if ratio >= stops[-1][0]:
+            return stops[-1][1]
+        for i in range(len(stops) - 1):
+            p0, c0 = stops[i]
+            p1, c1 = stops[i + 1]
+            if p0 <= ratio <= p1:
+                t = (ratio - p0) / (p1 - p0) if p1 > p0 else 0.0
+                return _lerp_hsv(c0, c1, t)
+        return stops[-1][1]
 
     def set_value(self, v: float):
         self._target = max(self.lo, min(self.hi, float(v)))
@@ -47,20 +101,12 @@ class Gauge(QWidget):
             self._cur += d * 0.14
             self.update()
 
-    def _color(self) -> QColor:
-        if self.crit is not None and self._cur >= self.crit:
-            return QColor('#ff2020')
-        if self.warn is not None and self._cur >= self.warn:
-            return QColor('#ff8800')
-        return self._base
-
     def paintEvent(self, _event):
         cfg = self._config
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w, h  = self.width(), self.height()
-
         pad   = self._ARC / 2 + 2
         diam  = min(w, h) - pad * 2
         if diam <= 0:
@@ -69,8 +115,9 @@ class Gauge(QWidget):
         cx    = w / 2
         cy    = h / 2
         rect  = QRectF(cx - r, cy - r, diam, diam)
-        ratio = max(0.0, min(1.0, (self._cur - self.lo) / (self.hi - self.lo)))
-        col   = self._color()
+        span  = (self.hi - self.lo) or 1.0
+        ratio = max(0.0, min(1.0, (self._cur - self.lo) / span))
+        col   = self._color_for(ratio)
 
         p.setPen(QPen(QColor(cfg.get('track_color')), self._TRACK,
                       Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))

@@ -1,8 +1,15 @@
 # iBaSaW SysGauge
 
-A dedicated hardware monitor panel for Linux — like AIDA64's sensor panel, but native to your desktop.  
+The Linux software for dedicated hardware monitoring screens — like AIDA64's sensor panel, but native to your desktop.  
 6 circular arc gauges (CPU temp, usage, RAM · GPU temp, fan, VRAM) built with PyQt6 and pynvml.  
-Smooth 60fps animation, rolling average stabilisation, transparent or solid background. Auto-starts on login.  
+Smooth 60fps animation, rolling average stabilisation, dynamic heat colors. Auto-starts on login.  
+**Built for dedicated monitoring screens** — works out of the box on stretched panels (1920×480), small IPS monitors, or any secondary display you use as a permanent hardware panel.  
+**Fully responsive** — gauges scale to any resolution and orientation: ultrawide, portrait, rotated, compact.  
+**One-command install** — a single `bash install.sh` sets up everything automatically.
+
+### Dedicated monitoring screen setup
+
+Plug in a secondary screen (a stretched panel, a small IPS monitor, anything), select it in the Settings sidebar under **Monitor**, and click **Set as default**. SysGauge will always open on that screen at login — no configuration files to edit.  
 
 ![SysGauge preview](screenshot.png)
 
@@ -128,7 +135,7 @@ tick_color:  "#3d3860"   # tick marks
 
 ## Autostart caveat
 
-The autostart entry uses `DISPLAY=:1`. If your display number differs, check with `echo $DISPLAY` and edit `~/.config/autostart/sysgauge.desktop` accordingly.
+The autostart entry inherits `$DISPLAY` from the login session, falling back to `:0`. If the app doesn't start on login, check your display number with `echo $DISPLAY` and edit `~/.config/autostart/sysgauge.desktop` accordingly.
 
 ## Uninstall
 

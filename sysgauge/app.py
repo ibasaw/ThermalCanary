@@ -3,9 +3,9 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QHBoxLayout, QVBoxLayout,
-                             QSizePolicy, QToolButton, QDialog, QLabel, QPushButton)
+                             QSizePolicy, QToolButton, QDialog, QLabel, QPushButton, QLayout)
 from PyQt6.QtCore import (Qt, QTimer, QThread, QPropertyAnimation, QEasingCurve,
-                           QMetaObject, Q_ARG, QRectF)
+                           QMetaObject, Q_ARG, QRectF, QRect)
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QIcon, QShortcut, QKeySequence, QGuiApplication
 
 from sysgauge.config import Config
@@ -118,6 +118,9 @@ class SysGauge(QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        # Prevent layout from pushing its minimumSizeHint into WM_NORMAL_HINTS,
+        # which causes Mutter to drop fullscreen on short monitors (e.g. 480px tall).
+        outer.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
 
         self._gauge_area = GaugeArea(config)
         gauge_area = self._gauge_area
@@ -152,11 +155,12 @@ class SysGauge(QWidget):
         self._worker.reading.connect(self._on_reading)
         self._thread.start()
 
-        self._sidebar = SettingsSidebar(config, self._worker)
-        self._sidebar.setMinimumWidth(0)
-        self._sidebar.setMaximumWidth(0)
-        self._sidebar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
-        outer.addWidget(self._sidebar)
+        # Sidebar is an overlay — NOT in the layout — so its minimumSizeHint
+        # never propagates into WM_NORMAL_HINTS and can't trigger Mutter to
+        # drop fullscreen state during the slide animation.
+        self._sidebar = SettingsSidebar(config, self._worker, self)
+        self._sidebar.setGeometry(self.width(), 0, 0, self.height())
+        self._sidebar.hide()
 
         btn_style = (
             'QToolButton { background:rgba(255,255,255,20); border:none; '
@@ -178,12 +182,18 @@ class SysGauge(QWidget):
         self._close_btn.raise_()
 
         QShortcut(QKeySequence('Ctrl+,'), self, self.toggle_settings)
-        QShortcut(QKeySequence('Escape'), self, self._close_settings)
+        esc = QShortcut(QKeySequence('Escape'), self)
+        esc.setContext(Qt.ShortcutContext.WindowShortcut)
+        esc.activated.connect(self._close_settings)
 
-        self._anim = QPropertyAnimation(self._sidebar, b'maximumWidth')
+        # Animate geometry directly — avoids layout invalidation that
+        # would re-propagate minimumSizeHint to WM_NORMAL_HINTS.
+        self._anim = QPropertyAnimation(self._sidebar, b'geometry')
         self._anim.setDuration(200)
         self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.finished.connect(self._on_anim_finished)
         self._sidebar_open = False
+        self.setMinimumSize(0, 0)
 
         config.changed.connect(self._on_config_changed)
 
@@ -193,19 +203,33 @@ class SysGauge(QWidget):
         else:
             self._open_settings()
 
+    def _restack_overlay(self):
+        self._sidebar.raise_()
+        self._gear_btn.raise_()
+        self._close_btn.raise_()
+
     def _open_settings(self):
         self._sidebar_open = True
+        self._sidebar.show()
+        self._restack_overlay()
         self._anim.stop()
-        self._anim.setStartValue(self._sidebar.maximumWidth())
-        self._anim.setEndValue(SIDEBAR_W)
+        self._anim.setStartValue(self._sidebar.geometry())
+        self._anim.setEndValue(QRect(self.width() - SIDEBAR_W, 0, SIDEBAR_W, self.height()))
         self._anim.start()
 
     def _close_settings(self):
+        if not self._sidebar_open:
+            return
         self._sidebar_open = False
         self._anim.stop()
-        self._anim.setStartValue(self._sidebar.maximumWidth())
-        self._anim.setEndValue(0)
+        self._anim.setStartValue(self._sidebar.geometry())
+        self._anim.setEndValue(QRect(self.width(), 0, 0, self.height()))
         self._anim.start()
+
+    def _on_anim_finished(self):
+        if not self._sidebar_open:
+            self._sidebar.hide()
+            self._sidebar.setGeometry(self.width(), 0, 0, self.height())
 
     def _confirm_quit(self):
         dlg = QuitDialog(self)
@@ -218,6 +242,10 @@ class SysGauge(QWidget):
         super().resizeEvent(event)
         self._gear_btn.move(self.width() - 84, 8)
         self._close_btn.move(self.width() - 44, 8)
+        if self._sidebar_open:
+            self._sidebar.setGeometry(self.width() - SIDEBAR_W, 0, SIDEBAR_W, self.height())
+        else:
+            self._sidebar.setGeometry(self.width(), 0, 0, self.height())
 
     def _on_reading(self, cpu_t, gpu_t, gpu_f, cpu_u, mem, gpu_vram):
         self.g_cpu_t.set_value(cpu_t)
@@ -259,6 +287,7 @@ class SysGauge(QWidget):
         # Clear min-size first so showNormal() doesn't snap back to a large size.
         self.setMinimumSize(0, 0)
         self.showNormal()
+        self.setMinimumSize(0, 0)
 
         # Migrate to the target QScreen before sizing — Qt6 cross-screen path.
         handle = self.windowHandle()
@@ -267,6 +296,7 @@ class SysGauge(QWidget):
 
         self.setGeometry(geo)
         QTimer.singleShot(50, self.showFullScreen)
+        QTimer.singleShot(100, self._restack_overlay)
 
     def closeEvent(self, event):
         self._config.save_now()
@@ -294,7 +324,12 @@ class SysGauge(QWidget):
 
 def main():
     import fcntl
-    lock_path = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'sysgauge.lock'
+    _runtime = os.environ.get('XDG_RUNTIME_DIR', '')
+    if _runtime:
+        lock_path = Path(_runtime) / 'sysgauge.lock'
+    else:
+        lock_path = Path.home() / '.cache' / 'sysgauge' / 'sysgauge.lock'
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_file = open(lock_path, 'w')
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)

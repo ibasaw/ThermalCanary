@@ -238,7 +238,7 @@ Type=Application
 Name=iBaSaW SysGauge
 Comment=Hardware gauge monitor
 Icon=sysgauge
-Exec=bash -c 'sleep 8 && DISPLAY=:1 $VENV/bin/python3 -m sysgauge'
+Exec=bash -c 'sleep 8 && DISPLAY="${DISPLAY:-:0}" $VENV/bin/python3 -m sysgauge'
 Path=$DATA_DIR
 Hidden=false
 NoDisplay=false
@@ -256,8 +256,8 @@ echo ""
 echo "  SysGauge runs entirely as your user — no root needed at runtime."
 echo ""
 echo "→ Launching SysGauge..."
-pkill -f "sysgauge" 2>/dev/null || true
+pkill -f "python3 -m sysgauge" 2>/dev/null || true
 sleep 0.5
-rm -f "${XDG_RUNTIME_DIR:-/tmp}/sysgauge.lock"
-DISPLAY=:1 "$VENV/bin/python3" -m sysgauge &
+rm -f "${XDG_RUNTIME_DIR:-$HOME/.cache/sysgauge}/sysgauge.lock"
+DISPLAY="${DISPLAY:-:0}" "$VENV/bin/python3" -m sysgauge &
 disown
