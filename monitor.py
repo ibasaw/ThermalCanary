@@ -6,8 +6,11 @@ GPU via pynvml. CPU temp/usage stabilised with 5-sample rolling average.
 
 import sys
 import math
+import os
 import psutil
 import pynvml
+import yaml
+from pathlib import Path
 from collections import deque
 
 from PyQt6.QtWidgets import QApplication, QWidget, QGridLayout, QSizePolicy
@@ -15,17 +18,51 @@ from PyQt6.QtCore import (Qt, QTimer, QRectF, QPointF,
                            QThread, QObject, pyqtSignal)
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QPainterPath, QLinearGradient
 
+# ── Defaults (used when config.yaml is missing or a key is absent) ───────────
+_DEFAULTS = {
+    'screen_index': 2,
+    'poll_ms':      1000,
+    'smooth_n':     5,
+    'bg_color':     '#252040',
+    'inner_color':  '#1e1a35',
+    'track_color':  '#332e55',
+    'tick_color':   '#3d3860',
+    'panel_radius': 18,
+}
+
+def _load_config() -> dict:
+    cfg_dir = Path(os.environ.get('XDG_CONFIG_HOME', '~/.config')).expanduser()
+    cfg_path = cfg_dir / 'sysgauge' / 'config.yaml'
+    cfg = dict(_DEFAULTS)
+    try:
+        with open(cfg_path) as f:
+            loaded = yaml.safe_load(f) or {}
+        cfg.update({k: v for k, v in loaded.items() if k in _DEFAULTS})
+    except FileNotFoundError:
+        print(f'[SysGauge] No config at {cfg_path} — using defaults', file=sys.stderr)
+    except yaml.YAMLError as e:
+        print(f'[SysGauge] Config parse error: {e} — using defaults', file=sys.stderr)
+    return cfg
+
+_cfg = _load_config()
+
 # ── Configuration ───────────────────────────────────────────────────────────────
-SCREEN_INDEX   = 2          # 0=monitor1  1=monitor2  2=monitor3
-POLL_MS        = 1000       # internal sensor poll — 1s for tight rolling buffer
-SMOOTH_N       = 5          # rolling average window (5 samples = 5s)
+SCREEN_INDEX   = _cfg['screen_index']
+POLL_MS        = _cfg['poll_ms']
+SMOOTH_N       = _cfg['smooth_n']
 ANIM_FPS       = 60
-BG_COLOR       = '#252040'  # deep purple, lifted for readability on bright screens
-INNER_COLOR    = '#1e1a35'  # inner circle
-TRACK_COLOR    = '#332e55'  # arc track
-TICK_COLOR     = '#3d3860'  # tick marks
-PANEL_RADIUS   = 18
+BG_COLOR       = _cfg['bg_color']
+INNER_COLOR    = _cfg['inner_color']
+TRACK_COLOR    = _cfg['track_color']
+TICK_COLOR     = _cfg['tick_color']
+PANEL_RADIUS   = _cfg['panel_radius']
 # ───────────────────────────────────────────────────────────────────────────────
+
+def _contrast_color(hex_bg: str) -> QColor:
+    """Return black or white depending on background luminance."""
+    c = QColor(hex_bg)
+    lum = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
+    return QColor('#1a1a1a') if lum > 140 else QColor('#ffffff')
 
 
 class SensorWorker(QObject):
@@ -154,8 +191,10 @@ class Gauge(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w, h  = self.width(), self.height()
-        pad   = 2
+        pad   = self._ARC / 2 + 2    # half solid arc pen + AA slack; glow may softly clip at edges (transparent, unnoticeable)
         diam  = min(w, h) - pad * 2
+        if diam <= 0:
+            return
         r     = diam / 2
         cx    = w / 2
         cy    = h / 2
@@ -246,7 +285,7 @@ class SysGauge(QWidget):
 
         grid = QGridLayout(self)
         grid.setSpacing(2)
-        grid.setContentsMargins(4, 16, 4, 4)
+        grid.setContentsMargins(4, 4, 4, 4)
         for c in range(3):
             grid.setColumnStretch(c, 1)
         for r in range(2):
@@ -302,40 +341,27 @@ class SysGauge(QWidget):
         lf.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 6)
         p.setFont(lf)
 
+        label_col = _contrast_color(BG_COLOR)
+        accent    = QColor(label_col)
+        accent.setAlpha(40)
+
         # ── CPU label + accent line ──────────────────────────────────
-        cpu_col = QColor('#ff4060')
-
-        # Glowing accent bar left of label
-        glow = QColor('#ffffff')
-        glow.setAlpha(40)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(glow)
+        p.setBrush(accent)
         p.drawRoundedRect(QRectF(PAD, 10, 4, 28), 2, 2)
-
-        p.setPen(QPen(QColor('#ffffff'), 4, Qt.PenStyle.SolidLine,
-                      Qt.PenCapStyle.RoundCap))
+        p.setPen(QPen(label_col, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawLine(PAD, 10, PAD, 38)
-
-        p.setPen(QColor('#ffffff'))
-        p.drawText(QRectF(PAD + 14, 8, 120, 32),
-                   Qt.AlignmentFlag.AlignVCenter, 'CPU')
+        p.setPen(label_col)
+        p.drawText(QRectF(PAD + 14, 8, 120, 32), Qt.AlignmentFlag.AlignVCenter, 'CPU')
 
         # ── GPU label + accent line ──────────────────────────────────
-        gpu_col = QColor('#ff7020')
-
-        glow2 = QColor('#ffffff')
-        glow2.setAlpha(40)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(glow2)
+        p.setBrush(accent)
         p.drawRoundedRect(QRectF(PAD, mid + 10, 4, 28), 2, 2)
-
-        p.setPen(QPen(QColor('#ffffff'), 4, Qt.PenStyle.SolidLine,
-                      Qt.PenCapStyle.RoundCap))
+        p.setPen(QPen(label_col, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawLine(PAD, mid + 10, PAD, mid + 38)
-
-        p.setPen(QColor('#ffffff'))
-        p.drawText(QRectF(PAD + 14, mid + 8, 120, 32),
-                   Qt.AlignmentFlag.AlignVCenter, 'GPU')
+        p.setPen(label_col)
+        p.drawText(QRectF(PAD + 14, mid + 8, 120, 32), Qt.AlignmentFlag.AlignVCenter, 'GPU')
 
         p.end()
 
@@ -349,6 +375,15 @@ class SysGauge(QWidget):
 
 
 def main():
+    import fcntl
+    lock_path = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'sysgauge.lock'
+    lock_file = open(lock_path, 'w')
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print('[SysGauge] Already running — exiting.', file=sys.stderr)
+        sys.exit(0)
+
     app = QApplication(sys.argv)
     win = SysGauge()
     win.place_on_screen()

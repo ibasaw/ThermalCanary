@@ -31,24 +31,56 @@ cd sysgauge
 bash install.sh
 ```
 
-The installer creates a Python venv at `~/.local/share/sysgauge/venv/`, installs dependencies, and registers an autostart entry so the app launches automatically on login.
+The installer will:
+1. Install system packages (`python3-venv`, `libxcb-cursor0`) via apt
+2. Copy the app to `~/.local/share/sysgauge/`
+3. Create a Python venv and install all Python dependencies
+4. Copy the default config to `~/.config/sysgauge/config.yaml` (only on first install — never overwrites your edits)
+5. Register an autostart entry so the app launches automatically on login (8s delay)
+6. Launch the app immediately
+
+The clone folder is only needed to run the installer. You can delete it afterwards.
+
+## Installed file layout
+
+| Path | What |
+|------|------|
+| `~/.local/share/sysgauge/monitor.py` | App script |
+| `~/.local/share/sysgauge/venv/` | Python virtual environment |
+| `~/.config/sysgauge/config.yaml` | User configuration |
+| `~/.config/autostart/sysgauge.desktop` | Autostart entry |
 
 ## Launch manually
 
 ```bash
-~/.local/share/sysgauge/venv/bin/python3 monitor.py
+~/.local/share/sysgauge/venv/bin/python3 ~/.local/share/sysgauge/monitor.py
 ```
 
 ## Configuration
 
-Edit the constants at the top of `monitor.py`:
+Edit `~/.config/sysgauge/config.yaml`:
 
-```python
-SCREEN_INDEX = 2       # which monitor (0-based)
-POLL_MS      = 1000    # sensor poll interval in ms
-SMOOTH_N     = 5       # rolling average window (samples)
-BG_COLOR     = '#252040'  # background colour
+```yaml
+screen_index: 2       # which monitor (0 = first, 1 = second, 2 = third...)
+poll_ms:      1000    # sensor poll interval in milliseconds
+smooth_n:     5       # rolling average window (number of samples)
+
+bg_color:    "#252040"   # window background
+inner_color: "#1e1a35"   # gauge inner circle
+track_color: "#332e55"   # arc track (unfilled)
+tick_color:  "#3d3860"   # tick marks
+panel_radius: 18         # gauge border radius (px)
 ```
+
+Changes take effect on next launch. The default config template is `config.example.yaml` in the repo.
+
+## Uninstall
+
+```bash
+bash uninstall.sh
+```
+
+Removes the app, venv, config, and autostart entry after confirmation.
 
 ## Architecture
 
