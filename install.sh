@@ -76,7 +76,7 @@ MISSING_PKGS=()
 INSTALL_CMD=""
 
 check_and_collect_apt() {
-  local pkgs=(python3 python3-venv python3-pip lm-sensors wmctrl libxcb-cursor0 libxcb-xinerama0)
+  local pkgs=(python3 python3-venv python3-pip lm-sensors libxcb-cursor0 libxcb-xinerama0)
   for pkg in "${pkgs[@]}"; do
     dpkg -s "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
@@ -84,7 +84,7 @@ check_and_collect_apt() {
 }
 
 check_and_collect_dnf() {
-  local pkgs=(python3 python3-pip lm_sensors wmctrl xcb-util-cursor libxcb)
+  local pkgs=(python3 python3-pip lm_sensors xcb-util-cursor libxcb)
   for pkg in "${pkgs[@]}"; do
     rpm -q "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
@@ -92,7 +92,7 @@ check_and_collect_dnf() {
 }
 
 check_and_collect_pacman() {
-  local pkgs=(python python-pip lm_sensors wmctrl xcb-util-cursor)
+  local pkgs=(python python-pip lm_sensors xcb-util-cursor)
   for pkg in "${pkgs[@]}"; do
     pacman -Qi "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
@@ -100,7 +100,7 @@ check_and_collect_pacman() {
 }
 
 check_and_collect_zypper() {
-  local pkgs=(python3 python3-pip lm-sensors wmctrl xcb-util-cursor libxcb1)
+  local pkgs=(python3 python3-pip lm-sensors xcb-util-cursor libxcb1)
   for pkg in "${pkgs[@]}"; do
     rpm -q "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done

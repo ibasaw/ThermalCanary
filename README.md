@@ -4,9 +4,9 @@ A dedicated hardware monitor panel for Linux — like AIDA64's sensor panel, but
 6 circular arc gauges (CPU temp, usage, RAM · GPU temp, fan, VRAM) built with PyQt6 and pynvml.  
 Smooth 60fps animation, rolling average stabilisation, transparent or solid background. Auto-starts on login.  
 
-![SysGauge preview](preview.png)
+![SysGauge preview](screenshot.png)
 
-![SysGauge with settings sidebar open](preview2.png)
+![SysGauge with settings sidebar open](screenshot-settings.png)
 
 ## Gauges
 
@@ -30,7 +30,6 @@ The installer checks and installs everything automatically. Here is the full dep
 | Python 3.10+ | Runtime |
 | `python3-venv` | Isolated Python environment |
 | `lm-sensors` | Populates `/sys/class/hwmon` for CPU temperature |
-| `wmctrl` | Multi-monitor window placement (fallback utility, installed for compatibility) |
 | XCB cursor libs (`libxcb-cursor0` / `xcb-util-cursor`) | Required by PyQt6 on X11 |
 
 **NVIDIA driver** — checked separately. The installer prints distro-specific install instructions if the driver is missing. GPU gauges (temperature, fan, VRAM) require the driver; CPU/RAM gauges work without it.
@@ -96,12 +95,12 @@ cd ~/.local/share/sysgauge && venv/bin/python3 -m sysgauge
 
 ## Settings sidebar
 
-Press **Ctrl+,** or click the **⚙** button (top-right corner) to open the settings sidebar. All changes apply live without restarting.
+Two buttons sit in the top-right corner: **⚙** opens the settings sidebar, **✕** closes the app (with confirmation). Press **Ctrl+,** to toggle the sidebar from the keyboard. All changes apply live without restarting.
 
 | Section | Setting | Description |
 |---------|---------|-------------|
 | Display | Monitor | Which monitor to display on — works with any number of monitors and any orientation |
-| Display | Set as default | Save the current monitor as the home monitor for resets |
+| Display | Set as default | Save the current monitor as the startup monitor — the app always opens here on launch |
 | Sampling | Poll rate | Sensor poll interval (100ms – 10s) |
 | Sampling | Smoothing | Rolling average window size (1–60 samples) |
 | Colors | Background | Window background color |
