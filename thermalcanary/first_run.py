@@ -2,7 +2,7 @@
 import glob
 import os
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                              QListWidget, QListWidgetItem, QPushButton)
+                              QListWidget, QListWidgetItem, QPushButton, QWidget)
 from PyQt6.QtCore import Qt
 
 
@@ -40,31 +40,37 @@ def _detect_gpus() -> list[dict]:
 class _FirstRunDialog(QDialog):
     def __init__(self, gpus: list[dict], parent=None):
         super().__init__(parent)
-        self.setWindowTitle('SysGauge — First Run')
-        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
-        self.setMinimumWidth(380)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.Dialog |
+            Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._gpus = gpus
         self._selected: dict | None = None
         self._build_ui()
 
     def _build_ui(self):
-        self.setStyleSheet('background:#1a1630; color:#eee; font-family:Inter;')
-        v = QVBoxLayout(self)
-        v.setContentsMargins(24, 24, 24, 24)
+        wrap = QWidget(self)
+        wrap.setObjectName('wrap')
+        wrap.setStyleSheet(
+            '#wrap { background:#1a1630; border:1px solid #443e70; border-radius:12px; }')
+
+        v = QVBoxLayout(wrap)
+        v.setContentsMargins(28, 24, 28, 24)
         v.setSpacing(14)
 
-        title = QLabel('Welcome to SysGauge')
-        title.setStyleSheet('font-size:16px; font-weight:bold; color:#fff;')
+        title = QLabel('Welcome to Thermal Canary')
+        title.setStyleSheet('font-size:16px; font-weight:bold; color:#fff; font-family:Inter;')
         v.addWidget(title)
 
         subtitle = QLabel('Select the GPU you want to monitor:')
-        subtitle.setStyleSheet('color:#aaa; font-size:12px;')
+        subtitle.setStyleSheet('color:#aaa; font-size:12px; font-family:Inter;')
         v.addWidget(subtitle)
 
         self._list = QListWidget()
         self._list.setStyleSheet(
             'QListWidget { background:#252040; border:1px solid #443e70; '
-            'border-radius:4px; color:#eee; }'
+            'border-radius:4px; color:#eee; font-family:Inter; }'
             'QListWidget::item { padding:6px; }'
             'QListWidget::item:selected { background:#3d3870; color:#fff; }')
         for gpu in self._gpus:
@@ -76,13 +82,18 @@ class _FirstRunDialog(QDialog):
         row = QHBoxLayout()
         row.addStretch()
         ok_btn = QPushButton('Start Monitoring')
+        ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         ok_btn.setStyleSheet(
             'QPushButton { background:#7c6ef5; border:none; border-radius:4px; '
-            'padding:8px 18px; color:#fff; font-weight:bold; }'
+            'padding:8px 18px; color:#fff; font-weight:bold; font-family:Inter; }'
             'QPushButton:hover { background:#9080ff; }')
         ok_btn.clicked.connect(self._accept)
         row.addWidget(ok_btn)
         v.addLayout(row)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(wrap)
 
     def _accept(self):
         row = self._list.currentRow()

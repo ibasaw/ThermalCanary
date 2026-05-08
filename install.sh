@@ -189,7 +189,7 @@ Type=Application
 Name=Thermal Canary
 Comment=Hardware gauge monitor
 Icon=thermalcanary
-Exec=$VENV/bin/python3 -m thermalcanary
+Exec=env QT_QPA_PLATFORM=xcb $VENV/bin/python3 -m thermalcanary
 Path=$DATA_DIR
 Terminal=false
 Categories=Utility;System;Monitor;
@@ -238,7 +238,7 @@ Type=Application
 Name=Thermal Canary
 Comment=Hardware gauge monitor
 Icon=thermalcanary
-Exec=bash -c 'sleep 8 && DISPLAY="${DISPLAY:-:0}" $VENV/bin/python3 -m thermalcanary'
+Exec=bash -c 'sleep 8 && QT_QPA_PLATFORM=xcb DISPLAY="${DISPLAY:-:0}" $VENV/bin/python3 -m thermalcanary'
 Path=$DATA_DIR
 Hidden=false
 NoDisplay=false

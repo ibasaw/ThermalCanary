@@ -5,10 +5,11 @@ from PyQt6.QtCore import Qt
 
 
 class TrayController:
-    def __init__(self, window, icon_path: str, config):
+    def __init__(self, window, icon_path: str, config, on_quit=None):
         self.window = window
         self.tray = None
         self._config = config
+        self._on_quit = on_quit or QApplication.instance().quit
 
         if not QSystemTrayIcon.isSystemTrayAvailable():
             if not config.get('tray_warning_shown'):
@@ -17,14 +18,14 @@ class TrayController:
             return
 
         self.tray = QSystemTrayIcon(QIcon(icon_path), parent=window)
-        self.tray.setToolTip('SysGauge')
+        self.tray.setToolTip('Thermal Canary')
 
         menu = QMenu()
         self._show_action = QAction('Hide', menu)
         self._show_action.triggered.connect(self._toggle)
         menu.addAction(self._show_action)
         menu.addSeparator()
-        menu.addAction(QAction('Quit', menu, triggered=QApplication.instance().quit))
+        menu.addAction(QAction('Quit', menu, triggered=self._on_quit))
 
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._on_activate)
@@ -32,7 +33,7 @@ class TrayController:
 
     def _show_no_tray_warning(self):
         dlg = QDialog()
-        dlg.setWindowTitle('SysGauge')
+        dlg.setWindowTitle('Thermal Canary')
         dlg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
         dlg.setStyleSheet('background:#1a1630; color:#ccc; font-family:Inter;')
         v = QVBoxLayout(dlg)
@@ -67,7 +68,7 @@ class TrayController:
         self.update_menu_label()
 
     def _raise(self):
-        self.window.showNormal()
+        self.window.showFullScreen()
         self.window.raise_()
         self.window.activateWindow()
 

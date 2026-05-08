@@ -5,22 +5,22 @@ from PyQt6.QtCore import Qt
 from thermalcanary.config import Config
 
 
+_HIDE_CHIPS = ('nvme', 'iwlwifi', 'pch_', 'nouveau', 'amdgpu', 'radeon', 'BAT', 'acpitz')
+
+
 def detect_available_sensors() -> dict[str, list[str]]:
-    sources: dict[str, list[str]] = {'cpu_temp': ['auto'], 'fan': ['auto']}
+    """Returns list of (display_label, key) pairs under 'cpu_temp'."""
+    sources: dict[str, list[tuple[str, str]]] = {'cpu_temp': [('auto', 'auto')]}
     try:
         for chip, entries in psutil.sensors_temperatures().items():
+            if any(chip.startswith(p) for p in _HIDE_CHIPS):
+                continue
             for e in entries:
                 key = f'{chip}/{e.label}' if e.label else chip
-                if key not in sources['cpu_temp']:
-                    sources['cpu_temp'].append(key)
-    except Exception:
-        pass
-    try:
-        for chip, entries in psutil.sensors_fans().items():
-            for e in entries:
-                key = f'{chip}/{e.label}' if e.label else chip
-                if key not in sources['fan']:
-                    sources['fan'].append(key)
+                if any(k == key for _, k in sources['cpu_temp']):
+                    continue
+                label = f'{chip}/{e.label}' if e.label else chip
+                sources['cpu_temp'].append((label, key))
     except Exception:
         pass
     return sources
@@ -48,6 +48,11 @@ class SensorSelectWidget(QWidget):
         note.setWordWrap(True)
         v.addWidget(note)
 
+        gpu_note = QLabel('GPU Fan gauge reads directly from NVML.\n0% = fans stopped (normal at low GPU load).')
+        gpu_note.setStyleSheet('color:#554e80; font-size:10px;')
+        gpu_note.setWordWrap(True)
+        v.addWidget(gpu_note)
+
         combo_style = (
             'QComboBox { background:#252040; border:1px solid #443e70; '
             'border-radius:4px; padding:4px 8px; color:#eee; }'
@@ -61,17 +66,17 @@ class SensorSelectWidget(QWidget):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         self._combos: dict[str, QComboBox] = {}
-        for slot, label in [('cpu_temp', 'CPU Temp'), ('fan', 'Fan')]:
+        for slot, row_label in [('cpu_temp', 'CPU Temp')]:
             cb = QComboBox()
             cb.setStyleSheet(combo_style)
-            for s in self._sources.get(slot, ['auto']):
-                cb.addItem(s)
+            for display, key in self._sources.get(slot, [('auto', 'auto')]):
+                cb.addItem(display, key)
             saved = self._config.get(f'{slot}_source') or 'auto'
-            idx = cb.findText(saved)
+            idx = cb.findData(saved)
             cb.setCurrentIndex(max(0, idx))
-            cb.currentTextChanged.connect(
-                lambda val, k=f'{slot}_source': self._config.set(k, val))
+            cb.currentIndexChanged.connect(
+                lambda _, cb=cb, k=f'{slot}_source': self._config.set(k, cb.currentData()))
             self._combos[slot] = cb
-            form.addRow(label, cb)
+            form.addRow(row_label, cb)
 
         v.addLayout(form)

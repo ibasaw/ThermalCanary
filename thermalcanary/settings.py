@@ -110,8 +110,12 @@ class SettingsSidebar(QWidget):
         si = cfg.get('screen_index')
         si = si if isinstance(si, int) and si >= 0 else 0
         self._screen_combo.setCurrentIndex(min(si, len(self._screens) - 1))
-        self._screen_combo.currentIndexChanged.connect(
-            lambda i: cfg.set('screen_index', i))
+        def _on_screen_changed(i):
+            from thermalcanary.screens import screen_uuid
+            cfg.set('screen_index', i)
+            if 0 <= i < len(self._screens):
+                cfg.set('screen_uuid', screen_uuid(self._screens[i]))
+        self._screen_combo.currentIndexChanged.connect(_on_screen_changed)
         form.addRow('Monitor', self._screen_combo)
 
         self._set_default_btn = QPushButton('Set as default')
@@ -152,24 +156,6 @@ class SettingsSidebar(QWidget):
             btn.color_changed.connect(lambda v, k=key: cfg.set(k, v))
             self._color_btns[key] = btn
             form.addRow(label, btn)
-
-        # Sensors
-        self._section(form, 'Sensors')
-        sensor_btn = QPushButton('Sensor Sources...')
-        sensor_btn.setStyleSheet(
-            'QPushButton { background:#252040; border:1px solid #443e70; '
-            'border-radius:4px; padding:4px 8px; color:#aaa; font-size:11px; }'
-            'QPushButton:hover { background:#3d3870; color:#fff; }')
-        sensor_btn.clicked.connect(self._open_sensor_select)
-        form.addRow('Sources', sensor_btn)
-
-        reset_gpu_btn = QPushButton('Re-detect GPU')
-        reset_gpu_btn.setStyleSheet(
-            'QPushButton { background:#252040; border:1px solid #443e70; '
-            'border-radius:4px; padding:4px 8px; color:#aaa; font-size:11px; }'
-            'QPushButton:hover { background:#3d3870; color:#fff; }')
-        reset_gpu_btn.clicked.connect(self._reset_gpu_detection)
-        form.addRow('GPU', reset_gpu_btn)
 
         outer.addLayout(form)
         outer.addStretch()
@@ -249,47 +235,171 @@ class SettingsSidebar(QWidget):
         for i, s in enumerate(self._screens):
             g = s.availableGeometry()
             star = ' ★' if i == default_idx else ''
-            self._screen_combo.addItem(f'Monitor {i + 1}  {g.width()}×{g.height()}{star}')
+            pos = f'+{g.x()}' if g.x() >= 0 else str(g.x())
+            self._screen_combo.addItem(f'Monitor {i + 1}  {g.width()}×{g.height()} ({s.name()} {pos}){star}')
         self._screen_combo.setCurrentIndex(max(current, 0))
         self._screen_combo.blockSignals(False)
 
     def _save_default_monitor(self):
+        from thermalcanary.screens import screen_uuid
         idx = self._screen_combo.currentIndex()
         self._config.set('default_screen_index', idx)
+        if 0 <= idx < len(self._screens):
+            self._config.set('default_screen_uuid', screen_uuid(self._screens[idx]))
         self._refresh_combo_items()
 
-    def _open_sensor_select(self):
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QHBoxLayout
-        from thermalcanary.sensor_select import SensorSelectWidget
+    def _premium_dialog(self, title_text: str):
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QWidget
+        from PyQt6.QtCore import Qt as _Qt
         dlg = QDialog(self)
-        dlg.setWindowTitle('Sensor Sources')
-        dlg.setMinimumWidth(360)
-        dlg.setStyleSheet('background:#1a1630; color:#ccc; font-family:Inter;')
-        v = QVBoxLayout(dlg)
-        v.setContentsMargins(16, 16, 16, 16)
-        v.setSpacing(8)
-        widget = SensorSelectWidget(self._config, dlg)
-        v.addWidget(widget)
+        dlg.setWindowFlags(_Qt.WindowType.FramelessWindowHint | _Qt.WindowType.Dialog)
+        dlg.setAttribute(_Qt.WidgetAttribute.WA_TranslucentBackground)
+        dlg.setModal(True)
+        wrap = QWidget(dlg)
+        wrap.setObjectName('wrap')
+        wrap.setStyleSheet(
+            '#wrap { background:#1a1630; border:1px solid #443e70; border-radius:12px; }'
+            'QWidget { color:#ccc; font-family:Inter; }')
+        title = QLabel(title_text)
+        title.setStyleSheet('color:#ffffff; font-family:Inter; font-size:14px; font-weight:bold;')
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(wrap)
+        return dlg, wrap, title
+
+    def _open_sensor_select(self):
+        from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton
+        from PyQt6.QtCore import Qt as _Qt
+        from thermalcanary.sensor_select import SensorSelectWidget
+        dlg, wrap, title = self._premium_dialog('Sensor Sources')
+        inner = QVBoxLayout(wrap)
+        inner.setContentsMargins(28, 24, 28, 24)
+        inner.setSpacing(14)
+        inner.addWidget(title)
+        inner.addWidget(SensorSelectWidget(self._config, wrap))
         row = QHBoxLayout()
         row.addStretch()
         close_btn = QPushButton('Close')
+        close_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
         close_btn.setStyleSheet(
             'QPushButton { background:#7c6ef5; border:none; border-radius:4px; '
-            'padding:6px 18px; color:#fff; font-weight:bold; }'
+            'padding:6px 18px; color:#fff; font-weight:bold; font-family:Inter; }'
             'QPushButton:hover { background:#9080ff; }')
         close_btn.clicked.connect(dlg.accept)
         row.addWidget(close_btn)
-        v.addLayout(row)
+        inner.addLayout(row)
+        dlg.adjustSize()
+        dlg.move(self.mapToGlobal(self.rect().center()) - dlg.rect().center())
         dlg.exec()
 
     def _reset_gpu_detection(self):
-        self._config.set('first_run_done', False)
-        from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.information(
-            self, 'GPU Detection',
-            'GPU detection will run on next app restart.')
+        from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        from PyQt6.QtCore import Qt as _Qt
+        from thermalcanary.first_run import _detect_gpus
+        gpus = _detect_gpus()
+        if not gpus:
+            msg = 'No GPU detected.\nCheck your drivers and try again.'
+            sub = ''
+        elif len(gpus) == 1:
+            msg = f'Found: {gpus[0]["name"]}'
+            sub = 'Restart the app to apply.'
+            self._config.set('gpu_index', gpus[0]['index'])
+            self._config.set('gpu_backend', gpus[0]['backend'])
+            self._config.set('first_run_done', True)
+        else:
+            names = '\n'.join(f'• {g["name"]}' for g in gpus)
+            msg = f'Found {len(gpus)} GPUs:\n{names}'
+            sub = 'Restart the app to choose which GPU to monitor.'
+            self._config.set('first_run_done', False)
+        dlg, wrap, title = self._premium_dialog('GPU Detection')
+        inner = QVBoxLayout(wrap)
+        inner.setContentsMargins(28, 24, 28, 24)
+        inner.setSpacing(12)
+        inner.addWidget(title)
+        msg_lbl = QLabel(msg)
+        msg_lbl.setStyleSheet('color:#aaaacc; font-family:Inter; font-size:12px;')
+        msg_lbl.setAlignment(_Qt.AlignmentFlag.AlignCenter)
+        msg_lbl.setWordWrap(True)
+        inner.addWidget(msg_lbl)
+        if sub:
+            sub_lbl = QLabel(sub)
+            sub_lbl.setStyleSheet('color:#665599; font-family:Inter; font-size:11px;')
+            sub_lbl.setAlignment(_Qt.AlignmentFlag.AlignCenter)
+            inner.addWidget(sub_lbl)
+        ok_btn = QPushButton('OK')
+        ok_btn.setCursor(_Qt.CursorShape.PointingHandCursor)
+        ok_btn.setStyleSheet(
+            'QPushButton { background:#7c6ef5; border:none; border-radius:4px; '
+            'padding:6px 18px; color:#fff; font-weight:bold; font-family:Inter; }'
+            'QPushButton:hover { background:#9080ff; }')
+        ok_btn.clicked.connect(dlg.accept)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(ok_btn)
+        inner.addLayout(btn_row)
+        dlg.adjustSize()
+        dlg.move(self.mapToGlobal(self.rect().center()) - dlg.rect().center())
+        dlg.exec()
 
     def _reset(self):
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        from PyQt6.QtCore import Qt as _Qt
+
+        dlg = QDialog(self)
+        dlg.setWindowFlags(_Qt.WindowType.FramelessWindowHint | _Qt.WindowType.Dialog)
+        dlg.setAttribute(_Qt.WidgetAttribute.WA_TranslucentBackground)
+        dlg.setModal(True)
+
+        from PyQt6.QtWidgets import QWidget as _QWidget
+        wrap = _QWidget(dlg)
+        wrap.setObjectName('wrap')
+        wrap.setStyleSheet('#wrap { background:#1a1630; border:1px solid #443e70; border-radius:12px; }')
+
+        title = QLabel('Reset to defaults')
+        title.setStyleSheet('color:#ffffff; font-family:Inter; font-size:14px; font-weight:bold;')
+        title.setAlignment(_Qt.AlignmentFlag.AlignCenter)
+
+        msg = QLabel('All settings will be reset.\nYour monitor preference will be kept.')
+        msg.setStyleSheet('color:#aaaacc; font-family:Inter; font-size:12px;')
+        msg.setAlignment(_Qt.AlignmentFlag.AlignCenter)
+
+        btn_cancel = QPushButton('Cancel')
+        btn_cancel.setCursor(_Qt.CursorShape.PointingHandCursor)
+        btn_cancel.setStyleSheet(
+            'QPushButton { background:#252040; border:1px solid #443e70; border-radius:6px;'
+            ' color:#aaa; font-family:Inter; font-size:12px; padding:6px 20px; }'
+            'QPushButton:hover { background:#2d2850; color:#fff; }')
+        btn_cancel.clicked.connect(dlg.reject)
+
+        btn_reset = QPushButton('Reset')
+        btn_reset.setCursor(_Qt.CursorShape.PointingHandCursor)
+        btn_reset.setStyleSheet(
+            'QPushButton { background:#5a1020; border:1px solid #ff2040; border-radius:6px;'
+            ' color:#ff6070; font-family:Inter; font-size:12px; font-weight:bold; padding:6px 20px; }'
+            'QPushButton:hover { background:#7a1828; color:#fff; }')
+        btn_reset.clicked.connect(dlg.accept)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(btn_reset)
+
+        inner = QVBoxLayout(wrap)
+        inner.setContentsMargins(28, 24, 28, 24)
+        inner.setSpacing(14)
+        inner.addWidget(title)
+        inner.addWidget(msg)
+        inner.addLayout(btn_row)
+
+        outer_l = QVBoxLayout(dlg)
+        outer_l.setContentsMargins(0, 0, 0, 0)
+        outer_l.addWidget(wrap)
+
+        dlg.adjustSize()
+        dlg.move(self.mapToGlobal(self.rect().center()) - dlg.rect().center())
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
         cfg = self._config
         # Preserve user's saved default monitor — reset everything else
         saved_default = cfg.get('default_screen_index')

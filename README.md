@@ -27,10 +27,12 @@ Plug in a secondary screen (a stretched panel, a small IPS monitor, anything), s
 | CPU | CPU Usage % | psutil |
 | CPU | RAM Usage % | psutil |
 | GPU | GPU Temperature | pynvml (NVML direct — no subprocess) |
-| GPU | GPU Fan Speed % | pynvml |
+| GPU | GPU Fan Speed % | pynvml (0% = fans stopped — normal at low GPU load) |
 | GPU | GPU VRAM Usage % | pynvml |
 
 ## Requirements
+
+> **Tested and supported on Ubuntu 24.04 LTS.** Other distros (Fedora, Arch, openSUSE) are supported by the installer but have not been formally tested yet. Ubuntu versions below 24.04 may work but are not guaranteed.
 
 The installer checks and installs everything automatically. Here is the full dependency list:
 

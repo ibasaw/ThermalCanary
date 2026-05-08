@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QHBoxLayout, QVBoxLayout,
-                             QSizePolicy, QToolButton, QDialog, QLabel, QPushButton, QLayout)
+                             QToolButton, QDialog, QLabel, QPushButton, QLayout)
 from PyQt6.QtCore import (Qt, QTimer, QThread, QPropertyAnimation, QEasingCurve,
                            QMetaObject, Q_ARG, QRectF, QRect)
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QIcon, QShortcut, QKeySequence, QGuiApplication
@@ -189,9 +189,7 @@ class ThermalCanary(QWidget):
         self._close_btn.clicked.connect(self._confirm_quit)
         self._close_btn.raise_()
 
-        self._tray = TrayController(self, icon_path, config)
-        if self._tray.tray is not None:
-            self.setWindowFlag(Qt.WindowType.Tool)
+        self._tray = TrayController(self, icon_path, config, on_quit=self._confirm_quit)
 
         QShortcut(QKeySequence('Ctrl+,'), self, self.toggle_settings)
         esc = QShortcut(QKeySequence('Escape'), self)
@@ -248,7 +246,13 @@ class ThermalCanary(QWidget):
         dlg.adjustSize()
         dlg.move(self.geometry().center() - dlg.rect().center())
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            self.close()
+            self._config.save_now()
+            QMetaObject.invokeMethod(
+                self._worker, 'stop',
+                Qt.ConnectionType.BlockingQueuedConnection)
+            self._thread.quit()
+            self._thread.wait()
+            QApplication.instance().quit()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -285,8 +289,22 @@ class ThermalCanary(QWidget):
                 self._worker, 'set_interval',
                 Qt.ConnectionType.QueuedConnection,
                 Q_ARG(int, self._config.get('poll_ms')))
-        elif key == 'screen_index':
-            self._move_to_screen(self._config.get('screen_index'))
+        elif key == 'cpu_temp_source':
+            QMetaObject.invokeMethod(
+                self._worker, 'reset_cpu_buf',
+                Qt.ConnectionType.QueuedConnection)
+        elif key in ('screen_index', 'screen_uuid'):
+            self._move_to_screen_by_uuid(self._config.get('screen_uuid'))
+
+    def _move_to_screen_by_uuid(self, target_uuid: str | None):
+        from thermalcanary.screens import find_index_by_uuid
+        screens = QApplication.instance().screens()
+        if not screens:
+            return
+        idx = find_index_by_uuid(screens, target_uuid)
+        if idx is None:
+            idx = self._config.get('screen_index')
+        self._move_to_screen(idx)
 
     def _move_to_screen(self, idx: int):
         screens = QApplication.instance().screens()
@@ -295,15 +313,10 @@ class ThermalCanary(QWidget):
         screen = screens[min(max(idx, 0), len(screens) - 1)]
         geo = screen.geometry()
 
-        # showFullScreen() fills the monitor without decorations and bypasses
-        # Mutter's WM_NORMAL_HINTS enforcement (which clamps window height to
-        # minimumSizeHint, breaking placement on short monitors like HDMI-1-1).
-        # Clear min-size first so showNormal() doesn't snap back to a large size.
         self.setMinimumSize(0, 0)
         self.showNormal()
         self.setMinimumSize(0, 0)
 
-        # Migrate to the target QScreen before sizing — Qt6 cross-screen path.
         handle = self.windowHandle()
         if handle:
             handle.setScreen(screen)
@@ -334,24 +347,32 @@ class ThermalCanary(QWidget):
         p.end()
 
     def place_on_screen(self):
-        screens = QApplication.instance().screens()
-        idx = min(int(self._config.get('screen_index')), len(screens) - 1)
+        target_uuid = self._config.get('screen_uuid')
         self.show()
-        # Let the WM map the window before migrating it to the target screen.
-        QTimer.singleShot(300, lambda: self._move_to_screen(idx))
+        QTimer.singleShot(300, lambda: self._move_to_screen_by_uuid(target_uuid))
+
+
+_lock_file = None  # module-level ref keeps the fd alive so the lock is never released
 
 
 def main():
     import fcntl
+    # Force XCB; geometry/fullscreen logic is tuned for X11/XWayland.
+    os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
+    # GNOME Wayland sessions may not set DISPLAY — target the XWayland socket.
+    if not os.environ.get('DISPLAY'):
+        os.environ['DISPLAY'] = ':0'
+
+    global _lock_file
     _runtime = os.environ.get('XDG_RUNTIME_DIR', '')
     if _runtime:
         lock_path = Path(_runtime) / 'thermalcanary.lock'
     else:
         lock_path = Path.home() / '.cache' / 'thermalcanary' / 'thermalcanary.lock'
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_file = open(lock_path, 'w')
+    _lock_file = open(lock_path, 'w')
     try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         print('[Thermal Canary] Already running — exiting.', file=sys.stderr)
         sys.exit(0)
@@ -367,11 +388,11 @@ def main():
     app.setWindowIcon(QIcon.fromTheme('thermalcanary', QIcon(str(icon_path))))
 
     config = Config()
-    config.clamp_screen_indices(len(app.screens()))
+    config.clamp_screen_indices(app.screens())
 
     from thermalcanary.first_run import run_if_needed
     run_if_needed(config)
 
-    win = SysGauge(config, icon_path=str(icon_path))
+    win = ThermalCanary(config, icon_path=str(icon_path))
     win.place_on_screen()
     sys.exit(app.exec())

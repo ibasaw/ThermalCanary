@@ -50,6 +50,10 @@ class SensorWorker(QObject):
         self._cpu_t_buf = deque(list(self._cpu_t_buf)[-n:], maxlen=n)
         self._cpu_u_buf = deque(list(self._cpu_u_buf)[-n:], maxlen=n)
 
+    @pyqtSlot()
+    def reset_cpu_buf(self):
+        self._cpu_t_buf.clear()
+
     def _poll(self):
         cpu_t_raw = self._cpu_temp()
         cpu_u_raw = psutil.cpu_percent(interval=None)
@@ -63,9 +67,30 @@ class SensorWorker(QObject):
 
     def _cpu_temp(self) -> float:
         try:
-            entries = psutil.sensors_temperatures().get('coretemp', [])
-            pkg = next((e for e in entries if e.label == 'Package id 0'), None)
-            return pkg.current if pkg else (entries[0].current if entries else 0.0)
+            all_temps = psutil.sensors_temperatures()
+            source = self._config.get('cpu_temp_source')
+            if source and source != 'auto':
+                if '/' in source:
+                    chip, _, label = source.rpartition('/')
+                    entries = all_temps.get(chip, [])
+                    entry = next((e for e in entries if e.label == label), None)
+                    if entry:
+                        return entry.current
+                else:
+                    entries = all_temps.get(source, [])
+                    if entries:
+                        return entries[0].current
+            # auto: coretemp Package id 0 → first coretemp → k10temp → first available
+            for chip_name in ('coretemp', 'k10temp', 'zenpower'):
+                entries = all_temps.get(chip_name, [])
+                if not entries:
+                    continue
+                pkg = next((e for e in entries if 'package' in e.label.lower()), None)
+                return (pkg or entries[0]).current
+            for entries in all_temps.values():
+                if entries:
+                    return entries[0].current
+            return 0.0
         except Exception:
             return 0.0
 

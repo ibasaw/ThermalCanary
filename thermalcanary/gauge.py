@@ -12,13 +12,6 @@ TEMP_HOT  = 80   # °C — red
 TEMP_CRIT = 90   # °C — bright red + blink
 
 
-def thermal_color(temp: float) -> str:
-    if temp >= TEMP_HOT:
-        return '#e03e3e'
-    if temp >= TEMP_WARM:
-        return '#f5a623'
-    return '#3ee060'
-
 
 _DEFAULT_GRADIENT = [
     (0.00, QColor('#00aaff')),
