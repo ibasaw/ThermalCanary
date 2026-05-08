@@ -332,13 +332,15 @@ class ThermalCanary(QWidget):
             self._tray.update_menu_label()
             return
         self._config.save_now()
-        # stop() must run in the worker thread (QTimer lives there).
-        # BlockingQueuedConnection blocks until the slot finishes.
-        QMetaObject.invokeMethod(
-            self._worker, 'stop',
-            Qt.ConnectionType.BlockingQueuedConnection)
-        self._thread.quit()
-        self._thread.wait()
+        if self._thread.isRunning():
+            # stop() must run in the worker thread (QTimer lives there).
+            # Guard isRunning() first: BlockingQueuedConnection on a stopped
+            # thread deadlocks because no event loop is there to reply.
+            QMetaObject.invokeMethod(
+                self._worker, 'stop',
+                Qt.ConnectionType.BlockingQueuedConnection)
+            self._thread.quit()
+            self._thread.wait()
         super().closeEvent(event)
 
     def paintEvent(self, _event):

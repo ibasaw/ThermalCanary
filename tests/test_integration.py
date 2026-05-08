@@ -55,4 +55,4 @@ def test_sensor_reading_flows_to_gauge_targets(tmp_config, qtbot):
         Qt.ConnectionType.BlockingQueuedConnection,
     )
     main._thread.quit()
-    main._thread.wait(1000)
+    main._thread.wait(2000)

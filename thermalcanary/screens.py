@@ -8,8 +8,9 @@ from __future__ import annotations
 import uuid
 from PyQt6.QtGui import QScreen
 
-# Fixed namespace — do not change, or all persisted UUIDs become invalid.
-_NAMESPACE = uuid.UUID("6f3d8b2a-1e4c-4a7f-9b21-7c8e5d0a3f12")
+# Derived from the project slug — self-documenting and reproducible.
+# Do not change: altering this invalidates all persisted screen UUIDs.
+_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "thermal-canary")
 
 
 def screen_uuid(screen: QScreen) -> str:

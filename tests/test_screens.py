@@ -2,7 +2,7 @@ import uuid
 
 from thermalcanary.screens import screen_uuid, find_index_by_uuid
 
-_NAMESPACE = uuid.UUID("6f3d8b2a-1e4c-4a7f-9b21-7c8e5d0a3f12")
+_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "thermal-canary")
 
 
 def test_uuid_edid_path(make_qscreen):
