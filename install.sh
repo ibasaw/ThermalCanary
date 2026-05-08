@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ThermalCanary installer
+# Thermal Canary installer
 #
 # Usage:
 #   bash install.sh               — check deps, print any missing, then install app
@@ -20,7 +20,7 @@ for arg in "$@"; do
   [[ "$arg" == "--install-deps" ]] && AUTO_INSTALL=1
 done
 
-echo "=== ThermalCanary Installer ==="
+echo "=== Thermal Canary Installer ==="
 echo "→ Project: $PROJECT_DIR"
 [[ "$AUTO_INSTALL" == "1" ]] && echo "→ Mode: auto-install system dependencies (sudo will be invoked)"
 
@@ -186,7 +186,7 @@ mkdir -p "$APPS_DIR"
 cat > "$APPS_DIR/thermalcanary.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=ThermalCanary
+Name=Thermal Canary
 Comment=Hardware gauge monitor
 Icon=thermalcanary
 Exec=$VENV/bin/python3 -m thermalcanary
@@ -235,7 +235,7 @@ mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
-Name=ThermalCanary
+Name=Thermal Canary
 Comment=Hardware gauge monitor
 Icon=thermalcanary
 Exec=bash -c 'sleep 8 && DISPLAY="${DISPLAY:-:0}" $VENV/bin/python3 -m thermalcanary'
@@ -253,9 +253,9 @@ echo "  App:       $DATA_DIR/thermalcanary/"
 echo "  Config:    $CFG_DIR/config.yaml"
 echo "  Autostart: enabled (8s delay after login)"
 echo ""
-echo "  ThermalCanary runs entirely as your user — no root needed at runtime."
+echo "  Thermal Canary runs entirely as your user — no root needed at runtime."
 echo ""
-echo "→ Launching ThermalCanary..."
+echo "→ Launching Thermal Canary..."
 pkill -f "python3 -m thermalcanary" 2>/dev/null || true
 sleep 0.5
 rm -f "${XDG_RUNTIME_DIR:-$HOME/.cache/thermalcanary}/thermalcanary.lock"

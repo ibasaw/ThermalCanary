@@ -1,4 +1,4 @@
-# ThermalCanary
+# Thermal Canary
 
 The Linux software for dedicated hardware monitoring screens — like AIDA64's sensor panel, but native to your desktop.
 
@@ -13,11 +13,11 @@ Smooth 60fps animation, rolling average stabilisation, dynamic heat colors. Auto
 
 ### Dedicated monitoring screen setup
 
-Plug in a secondary screen (a stretched panel, a small IPS monitor, anything), select it in the Settings sidebar under **Monitor**, and click **Set as default**. ThermalCanary will always open on that screen at login — no configuration files to edit.  
+Plug in a secondary screen (a stretched panel, a small IPS monitor, anything), select it in the Settings sidebar under **Monitor**, and click **Set as default**. Thermal Canary will always open on that screen at login — no configuration files to edit.  
 
-![ThermalCanary preview](screenshot.png)
+![Thermal Canary preview](screenshot.png)
 
-![ThermalCanary with settings sidebar open](screenshot-settings.png)
+![Thermal Canary with settings sidebar open](screenshot-settings.png)
 
 ## Gauges
 
@@ -66,7 +66,7 @@ cd thermalcanary
 bash install.sh
 ```
 
-**ThermalCanary runs entirely as your user — no root needed at runtime.**
+**Thermal Canary runs entirely as your user — no root needed at runtime.**
 
 The installer separates system-package installation from everything else:
 

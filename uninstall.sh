@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ThermalCanary uninstaller
+# Thermal Canary uninstaller
 set -euo pipefail
 
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/thermalcanary"
@@ -7,7 +7,7 @@ CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/thermalcanary"
 DESKTOP="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/thermalcanary.desktop"
 APPS_ENTRY="$HOME/.local/share/applications/thermalcanary.desktop"
 
-echo "=== ThermalCanary Uninstaller ==="
+echo "=== Thermal Canary Uninstaller ==="
 echo ""
 echo "This will remove:"
 echo "  $DATA_DIR"

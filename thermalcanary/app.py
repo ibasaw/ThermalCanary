@@ -34,7 +34,7 @@ class QuitDialog(QDialog):
         wrap.setStyleSheet(
             '#wrap { background:#1a1630; border:1px solid #443e70; border-radius:12px; }')
 
-        title = QLabel('Quit ThermalCanary')
+        title = QLabel('Quit Thermal Canary')
         title.setStyleSheet('color:#ffffff; font-family:Inter; font-size:14px; font-weight:bold;')
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -120,7 +120,7 @@ class ThermalCanary(QWidget):
     def __init__(self, config: Config, icon_path: str = ''):
         super().__init__()
         self._config = config
-        self.setWindowTitle('ThermalCanary')
+        self.setWindowTitle('Thermal Canary')
         self.setWindowFlags(Qt.WindowType.Window)
 
         outer = QHBoxLayout(self)
@@ -353,14 +353,14 @@ def main():
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print('[ThermalCanary] Already running — exiting.', file=sys.stderr)
+        print('[Thermal Canary] Already running — exiting.', file=sys.stderr)
         sys.exit(0)
 
     QGuiApplication.setDesktopFileName('thermalcanary')
 
     app = QApplication(sys.argv)
     app.setApplicationName('thermalcanary')
-    app.setApplicationDisplayName('ThermalCanary')
+    app.setApplicationDisplayName('Thermal Canary')
 
     icon_path = (Path(os.environ.get('XDG_DATA_HOME', '~/.local/share')).expanduser()
                  / 'thermalcanary' / 'assets' / 'thermalcanary.png')
