@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QApplication, QStackedWidget, QTabWidget)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
-from sysgauge.config import Config, DEFAULTS
+from thermalcanary.config import Config, DEFAULTS
 
 SIDEBAR_W = 320
 
@@ -153,6 +153,24 @@ class SettingsSidebar(QWidget):
             self._color_btns[key] = btn
             form.addRow(label, btn)
 
+        # Sensors
+        self._section(form, 'Sensors')
+        sensor_btn = QPushButton('Sensor Sources...')
+        sensor_btn.setStyleSheet(
+            'QPushButton { background:#252040; border:1px solid #443e70; '
+            'border-radius:4px; padding:4px 8px; color:#aaa; font-size:11px; }'
+            'QPushButton:hover { background:#3d3870; color:#fff; }')
+        sensor_btn.clicked.connect(self._open_sensor_select)
+        form.addRow('Sources', sensor_btn)
+
+        reset_gpu_btn = QPushButton('Re-detect GPU')
+        reset_gpu_btn.setStyleSheet(
+            'QPushButton { background:#252040; border:1px solid #443e70; '
+            'border-radius:4px; padding:4px 8px; color:#aaa; font-size:11px; }'
+            'QPushButton:hover { background:#3d3870; color:#fff; }')
+        reset_gpu_btn.clicked.connect(self._reset_gpu_detection)
+        form.addRow('GPU', reset_gpu_btn)
+
         outer.addLayout(form)
         outer.addStretch()
 
@@ -239,6 +257,37 @@ class SettingsSidebar(QWidget):
         idx = self._screen_combo.currentIndex()
         self._config.set('default_screen_index', idx)
         self._refresh_combo_items()
+
+    def _open_sensor_select(self):
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QHBoxLayout
+        from thermalcanary.sensor_select import SensorSelectWidget
+        dlg = QDialog(self)
+        dlg.setWindowTitle('Sensor Sources')
+        dlg.setMinimumWidth(360)
+        dlg.setStyleSheet('background:#1a1630; color:#ccc; font-family:Inter;')
+        v = QVBoxLayout(dlg)
+        v.setContentsMargins(16, 16, 16, 16)
+        v.setSpacing(8)
+        widget = SensorSelectWidget(self._config, dlg)
+        v.addWidget(widget)
+        row = QHBoxLayout()
+        row.addStretch()
+        close_btn = QPushButton('Close')
+        close_btn.setStyleSheet(
+            'QPushButton { background:#7c6ef5; border:none; border-radius:4px; '
+            'padding:6px 18px; color:#fff; font-weight:bold; }'
+            'QPushButton:hover { background:#9080ff; }')
+        close_btn.clicked.connect(dlg.accept)
+        row.addWidget(close_btn)
+        v.addLayout(row)
+        dlg.exec()
+
+    def _reset_gpu_detection(self):
+        self._config.set('first_run_done', False)
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self, 'GPU Detection',
+            'GPU detection will run on next app restart.')
 
     def _reset(self):
         cfg = self._config

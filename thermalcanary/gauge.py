@@ -2,9 +2,23 @@ import math
 from PyQt6.QtWidgets import QWidget, QSizePolicy
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
-from sysgauge.config import Config
+from thermalcanary.config import Config
 
 ANIM_FPS = 60
+
+# Thermal alert thresholds — Spec: docs/specs/core-monitoring.md#thermal-alerts
+TEMP_WARM = 60   # °C — orange
+TEMP_HOT  = 80   # °C — red
+TEMP_CRIT = 90   # °C — bright red + blink
+
+
+def thermal_color(temp: float) -> str:
+    if temp >= TEMP_HOT:
+        return '#e03e3e'
+    if temp >= TEMP_WARM:
+        return '#f5a623'
+    return '#3ee060'
+
 
 _DEFAULT_GRADIENT = [
     (0.00, QColor('#00aaff')),
@@ -40,19 +54,23 @@ class Gauge(QWidget):
 
     def __init__(self, title: str, unit: str, lo: float, hi: float,
                  color: str, config: Config, warn: float | None = None,
-                 crit: float | None = None, decimals: int = 0):
+                 crit: float | None = None, decimals: int = 0,
+                 blink_above: float | None = None):
         super().__init__()
-        self.title    = title
-        self.unit     = unit
-        self.lo       = lo
-        self.hi       = hi
-        self._base    = QColor(color)  # kept for API compat; dynamic color overrides
-        self._config  = config
-        self.warn     = warn
-        self.crit     = crit
-        self.decimals = decimals
-        self._target  = float(lo)
-        self._cur     = float(lo)
+        self.title       = title
+        self.unit        = unit
+        self.lo          = lo
+        self.hi          = hi
+        self._base       = QColor(color)  # kept for API compat; dynamic color overrides
+        self._config     = config
+        self.warn        = warn
+        self.crit        = crit
+        self.decimals    = decimals
+        self.blink_above = blink_above
+        self._target     = float(lo)
+        self._cur        = float(lo)
+        self._blink_on   = True
+        self._blink_frame = 0
         self._gradient_stops = self._build_stops()
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -100,6 +118,16 @@ class Gauge(QWidget):
         if abs(d) > 0.02:
             self._cur += d * 0.14
             self.update()
+        if self.blink_above is not None and self._cur >= self.blink_above:
+            self._blink_frame = (self._blink_frame + 1) % 40
+            new_on = self._blink_frame < 26
+            if new_on != self._blink_on:
+                self._blink_on = new_on
+                self.update()
+        elif not self._blink_on:
+            self._blink_on = True
+            self._blink_frame = 0
+            self.update()
 
     def paintEvent(self, _event):
         cfg = self._config
@@ -125,13 +153,13 @@ class Gauge(QWidget):
 
         self._draw_ticks(p, cx, cy, r)
 
-        if ratio > 0.01:
+        if ratio > 0.01 and self._blink_on:
             gc = QColor(col)
             gc.setAlpha(40)
             p.setPen(QPen(gc, self._GLOW, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             p.drawArc(rect, int(self._START * 16), int(-ratio * self._SPAN * 16))
 
-        if ratio > 0.01:
+        if ratio > 0.01 and self._blink_on:
             p.setPen(QPen(col, self._ARC, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             p.drawArc(rect, int(self._START * 16), int(-ratio * self._SPAN * 16))
 

@@ -1,4 +1,4 @@
-# iBaSaW SysGauge
+# ThermalCanary
 
 The Linux software for dedicated hardware monitoring screens — like AIDA64's sensor panel, but native to your desktop.
 
@@ -13,11 +13,11 @@ Smooth 60fps animation, rolling average stabilisation, dynamic heat colors. Auto
 
 ### Dedicated monitoring screen setup
 
-Plug in a secondary screen (a stretched panel, a small IPS monitor, anything), select it in the Settings sidebar under **Monitor**, and click **Set as default**. SysGauge will always open on that screen at login — no configuration files to edit.  
+Plug in a secondary screen (a stretched panel, a small IPS monitor, anything), select it in the Settings sidebar under **Monitor**, and click **Set as default**. ThermalCanary will always open on that screen at login — no configuration files to edit.  
 
-![SysGauge preview](screenshot.png)
+![ThermalCanary preview](screenshot.png)
 
-![SysGauge with settings sidebar open](screenshot-settings.png)
+![ThermalCanary with settings sidebar open](screenshot-settings.png)
 
 ## Gauges
 
@@ -61,12 +61,12 @@ Supported package managers: **apt** (Debian/Ubuntu), **dnf** (Fedora/RHEL), **pa
 ## Install
 
 ```bash
-git clone https://github.com/ibasaw/sysgauge.git
-cd sysgauge
+git clone https://github.com/ibasaw/thermalcanary.git
+cd thermalcanary
 bash install.sh
 ```
 
-**SysGauge runs entirely as your user — no root needed at runtime.**
+**ThermalCanary runs entirely as your user — no root needed at runtime.**
 
 The installer separates system-package installation from everything else:
 
@@ -76,10 +76,10 @@ The installer separates system-package installation from everything else:
 The installer will:
 1. Check for NVIDIA driver — prints distro-specific install instructions if missing (GPU gauges need it; CPU/RAM gauges work without)
 2. Check system packages — prints missing ones or installs them if `--install-deps` was passed
-3. Copy the app package and icon to `~/.local/share/sysgauge/`
+3. Copy the app package and icon to `~/.local/share/thermalcanary/`
 4. Create a Python venv and install all Python dependencies (PyQt6, psutil, nvidia-ml-py, PyYAML)
 5. Verify all dependencies are working
-6. Copy the default config to `~/.config/sysgauge/config.yaml` (only on first install — never overwrites existing config)
+6. Copy the default config to `~/.config/thermalcanary/config.yaml` (only on first install — never overwrites existing config)
 7. Register the app in `~/.local/share/applications/` for taskbar icon support
 8. Register an autostart entry so the app launches 8 seconds after login
 9. Kill any running instance and launch the app immediately
@@ -90,18 +90,18 @@ The clone folder is only needed to run the installer. You can delete it afterwar
 
 | Path | What |
 |------|------|
-| `~/.local/share/sysgauge/sysgauge/` | App package |
-| `~/.local/share/sysgauge/assets/` | App icon |
-| `~/.local/share/sysgauge/venv/` | Python virtual environment |
-| `~/.local/share/icons/hicolor/*/apps/sysgauge.png` | System icon (taskbar) |
-| `~/.local/share/applications/sysgauge.desktop` | App entry (taskbar icon) |
-| `~/.config/sysgauge/config.yaml` | User configuration (auto-saved by the app) |
-| `~/.config/autostart/sysgauge.desktop` | Autostart on login |
+| `~/.local/share/thermalcanary/thermalcanary/` | App package |
+| `~/.local/share/thermalcanary/assets/` | App icon |
+| `~/.local/share/thermalcanary/venv/` | Python virtual environment |
+| `~/.local/share/icons/hicolor/*/apps/thermalcanary.png` | System icon (taskbar) |
+| `~/.local/share/applications/thermalcanary.desktop` | App entry (taskbar icon) |
+| `~/.config/thermalcanary/config.yaml` | User configuration (auto-saved by the app) |
+| `~/.config/autostart/thermalcanary.desktop` | Autostart on login |
 
 ## Launch manually
 
 ```bash
-cd ~/.local/share/sysgauge && venv/bin/python3 -m sysgauge
+cd ~/.local/share/thermalcanary && venv/bin/python3 -m thermalcanary
 ```
 
 ## Settings sidebar
@@ -123,7 +123,7 @@ The **Reset to defaults** button restores all colors and sampling values to fact
 
 ## Configuration file
 
-`~/.config/sysgauge/config.yaml` is written automatically by the settings sidebar. You can also edit it by hand; changes take effect on next launch.
+`~/.config/thermalcanary/config.yaml` is written automatically by the settings sidebar. You can also edit it by hand; changes take effect on next launch.
 
 ```yaml
 poll_ms:  1000     # sensor poll interval in milliseconds
@@ -139,7 +139,7 @@ tick_color:  "#3d3860"   # tick marks
 
 ## Autostart caveat
 
-The autostart entry inherits `$DISPLAY` from the login session, falling back to `:0`. If the app doesn't start on login, check your display number with `echo $DISPLAY` and edit `~/.config/autostart/sysgauge.desktop` accordingly.
+The autostart entry inherits `$DISPLAY` from the login session, falling back to `:0`. If the app doesn't start on login, check your display number with `echo $DISPLAY` and edit `~/.config/autostart/thermalcanary.desktop` accordingly.
 
 ## Uninstall
 
@@ -158,7 +158,7 @@ Removes the app, venv, icon, config, and all desktop entries after confirmation.
 - Window runs **fullscreen** (`showFullScreen`) — no title bar, fills the entire monitor. This bypasses Mutter's `WM_NORMAL_HINTS` enforcement which otherwise clamps window geometry to `minimumSizeHint`, making maximize unreliable on short or rotated monitors
 - Monitor switching uses `windowHandle().setScreen()` (Qt6 native cross-screen migration) followed by `setGeometry()` + `showFullScreen()` — no wmctrl or subprocess required
 - Monitor indices are validated against actual connected screens at startup — safe on any number of monitors
-- Single-instance lock via `fcntl.flock` on `$XDG_RUNTIME_DIR/sysgauge.lock`
+- Single-instance lock via `fcntl.flock` on `$XDG_RUNTIME_DIR/thermalcanary.lock`
 - Runs entirely as the logged-in user — no root required at runtime
 
 ## License

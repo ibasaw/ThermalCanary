@@ -8,10 +8,11 @@ from PyQt6.QtCore import (Qt, QTimer, QThread, QPropertyAnimation, QEasingCurve,
                            QMetaObject, Q_ARG, QRectF, QRect)
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QIcon, QShortcut, QKeySequence, QGuiApplication
 
-from sysgauge.config import Config
-from sysgauge.sensor import SensorWorker
-from sysgauge.gauge import Gauge
-from sysgauge.settings import SettingsSidebar, SIDEBAR_W
+from thermalcanary.config import Config
+from thermalcanary.sensor import SensorWorker
+from thermalcanary.gauge import Gauge, TEMP_WARM, TEMP_HOT, TEMP_CRIT
+from thermalcanary.settings import SettingsSidebar, SIDEBAR_W
+from thermalcanary.tray import TrayController
 
 try:
     import sysgauge_pro as _pro
@@ -33,7 +34,7 @@ class QuitDialog(QDialog):
         wrap.setStyleSheet(
             '#wrap { background:#1a1630; border:1px solid #443e70; border-radius:12px; }')
 
-        title = QLabel('Quit SysGauge')
+        title = QLabel('Quit ThermalCanary')
         title.setStyleSheet('color:#ffffff; font-family:Inter; font-size:14px; font-weight:bold;')
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -115,11 +116,11 @@ class GaugeArea(QWidget):
         p.end()
 
 
-class SysGauge(QWidget):
-    def __init__(self, config: Config):
+class ThermalCanary(QWidget):
+    def __init__(self, config: Config, icon_path: str = ''):
         super().__init__()
         self._config = config
-        self.setWindowTitle('iBaSaW SysGauge')
+        self.setWindowTitle('ThermalCanary')
         self.setWindowFlags(Qt.WindowType.Window)
 
         outer = QHBoxLayout(self)
@@ -137,10 +138,10 @@ class SysGauge(QWidget):
         for c in range(3): grid.setColumnStretch(c, 1)
         for r in range(2): grid.setRowStretch(r, 1)
 
-        self.g_cpu_t = Gauge('CPU Temp',  '°C', 0, 100, '#ff4060', config, warn=70, crit=85)
+        self.g_cpu_t = Gauge('CPU Temp',  '°C', 0, 100, '#ff4060', config, warn=TEMP_WARM, crit=TEMP_HOT, blink_above=TEMP_CRIT)
         self.g_cpu_u = Gauge('CPU Usage',  '%',  0, 100, '#39ff14', config, warn=85, crit=95)
         self.g_mem   = Gauge('RAM Usage',  '%',  0, 100, '#a855f7', config, warn=80, crit=92)
-        self.g_gpu_t = Gauge('GPU Temp',  '°C', 0, 100, '#ff7020', config, warn=75, crit=90)
+        self.g_gpu_t = Gauge('GPU Temp',  '°C', 0, 100, '#ff7020', config, warn=TEMP_WARM, crit=TEMP_HOT, blink_above=TEMP_CRIT)
         self.g_fan   = Gauge('GPU Fan',    '%',  0, 100, '#00c8ff', config, decimals=0)
         self.g_vram  = Gauge('GPU VRAM',   '%',  0, 100, '#00e5cc', config, warn=80, crit=95)
         self._gauges = [self.g_cpu_t, self.g_cpu_u, self.g_mem,
@@ -187,6 +188,10 @@ class SysGauge(QWidget):
         self._close_btn.setStyleSheet(btn_style)
         self._close_btn.clicked.connect(self._confirm_quit)
         self._close_btn.raise_()
+
+        self._tray = TrayController(self, icon_path, config)
+        if self._tray.tray is not None:
+            self.setWindowFlag(Qt.WindowType.Tool)
 
         QShortcut(QKeySequence('Ctrl+,'), self, self.toggle_settings)
         esc = QShortcut(QKeySequence('Escape'), self)
@@ -308,6 +313,11 @@ class SysGauge(QWidget):
         QTimer.singleShot(100, self._restack_overlay)
 
     def closeEvent(self, event):
+        if self._tray.tray is not None and self._config.get('tray_minimize_to_tray'):
+            event.ignore()
+            self.hide()
+            self._tray.update_menu_label()
+            return
         self._config.save_now()
         # stop() must run in the worker thread (QTimer lives there).
         # BlockingQueuedConnection blocks until the slot finishes.
@@ -335,29 +345,33 @@ def main():
     import fcntl
     _runtime = os.environ.get('XDG_RUNTIME_DIR', '')
     if _runtime:
-        lock_path = Path(_runtime) / 'sysgauge.lock'
+        lock_path = Path(_runtime) / 'thermalcanary.lock'
     else:
-        lock_path = Path.home() / '.cache' / 'sysgauge' / 'sysgauge.lock'
+        lock_path = Path.home() / '.cache' / 'thermalcanary' / 'thermalcanary.lock'
         lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_file = open(lock_path, 'w')
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print('[SysGauge] Already running — exiting.', file=sys.stderr)
+        print('[ThermalCanary] Already running — exiting.', file=sys.stderr)
         sys.exit(0)
 
-    QGuiApplication.setDesktopFileName('sysgauge')
+    QGuiApplication.setDesktopFileName('thermalcanary')
 
     app = QApplication(sys.argv)
-    app.setApplicationName('sysgauge')
-    app.setApplicationDisplayName('iBaSaW SysGauge')
+    app.setApplicationName('thermalcanary')
+    app.setApplicationDisplayName('ThermalCanary')
 
     icon_path = (Path(os.environ.get('XDG_DATA_HOME', '~/.local/share')).expanduser()
-                 / 'sysgauge' / 'assets' / 'sysgauge.png')
-    app.setWindowIcon(QIcon.fromTheme('sysgauge', QIcon(str(icon_path))))
+                 / 'thermalcanary' / 'assets' / 'thermalcanary.png')
+    app.setWindowIcon(QIcon.fromTheme('thermalcanary', QIcon(str(icon_path))))
 
     config = Config()
     config.clamp_screen_indices(len(app.screens()))
-    win = SysGauge(config)
+
+    from thermalcanary.first_run import run_if_needed
+    run_if_needed(config)
+
+    win = SysGauge(config, icon_path=str(icon_path))
     win.place_on_screen()
     sys.exit(app.exec())

@@ -2,7 +2,7 @@ import psutil
 import pynvml
 from collections import deque
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot
-from sysgauge.config import Config
+from thermalcanary.config import Config
 
 
 class SensorWorker(QObject):

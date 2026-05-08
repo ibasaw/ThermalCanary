@@ -1,4 +1,4 @@
-from sysgauge.app import main
+from thermalcanary.app import main
 
 if __name__ == '__main__':
     main()

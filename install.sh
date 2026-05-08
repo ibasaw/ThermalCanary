@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# iBaSaW SysGauge installer
+# ThermalCanary installer
 #
 # Usage:
 #   bash install.sh               — check deps, print any missing, then install app
@@ -10,17 +10,17 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/sysgauge"
-CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sysgauge"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/thermalcanary"
+CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/thermalcanary"
 VENV="$DATA_DIR/venv"
-DESKTOP="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/sysgauge.desktop"
+DESKTOP="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/thermalcanary.desktop"
 
 AUTO_INSTALL=0
 for arg in "$@"; do
   [[ "$arg" == "--install-deps" ]] && AUTO_INSTALL=1
 done
 
-echo "=== iBaSaW SysGauge Installer ==="
+echo "=== ThermalCanary Installer ==="
 echo "→ Project: $PROJECT_DIR"
 [[ "$AUTO_INSTALL" == "1" ]] && echo "→ Mode: auto-install system dependencies (sudo will be invoked)"
 
@@ -167,33 +167,33 @@ echo "  Python $PY_VER OK"
 echo ""
 echo "→ Copying app to $DATA_DIR..."
 mkdir -p "$DATA_DIR"
-rm -rf "$DATA_DIR/sysgauge"
-cp -r "$PROJECT_DIR/sysgauge" "$DATA_DIR/sysgauge"
+rm -rf "$DATA_DIR/thermalcanary"
+cp -r "$PROJECT_DIR/thermalcanary" "$DATA_DIR/thermalcanary"
 cp -r "$PROJECT_DIR/assets"   "$DATA_DIR/assets"
 
 echo "→ Installing icon..."
-ICON_SRC="$PROJECT_DIR/assets/sysgauge.png"
+ICON_SRC="$PROJECT_DIR/assets/thermalcanary.png"
 HICOLOR="$HOME/.local/share/icons/hicolor"
 for size in 512 256 128 48; do mkdir -p "$HICOLOR/${size}x${size}/apps"; done
 for size in 512 256 128 48; do
-  cp -f "$ICON_SRC" "$HICOLOR/${size}x${size}/apps/sysgauge.png"
+  cp -f "$ICON_SRC" "$HICOLOR/${size}x${size}/apps/thermalcanary.png"
 done
 gtk-update-icon-cache -f -t "$HICOLOR" 2>/dev/null || true
 
 echo "→ Installing application entry..."
 APPS_DIR="$HOME/.local/share/applications"
 mkdir -p "$APPS_DIR"
-cat > "$APPS_DIR/sysgauge.desktop" <<EOF
+cat > "$APPS_DIR/thermalcanary.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=iBaSaW SysGauge
+Name=ThermalCanary
 Comment=Hardware gauge monitor
-Icon=sysgauge
-Exec=$VENV/bin/python3 -m sysgauge
+Icon=thermalcanary
+Exec=$VENV/bin/python3 -m thermalcanary
 Path=$DATA_DIR
 Terminal=false
 Categories=Utility;System;Monitor;
-StartupWMClass=sysgauge
+StartupWMClass=thermalcanary
 StartupNotify=false
 EOF
 update-desktop-database "$APPS_DIR" 2>/dev/null || true
@@ -235,10 +235,10 @@ mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
-Name=iBaSaW SysGauge
+Name=ThermalCanary
 Comment=Hardware gauge monitor
-Icon=sysgauge
-Exec=bash -c 'sleep 8 && DISPLAY="${DISPLAY:-:0}" $VENV/bin/python3 -m sysgauge'
+Icon=thermalcanary
+Exec=bash -c 'sleep 8 && DISPLAY="${DISPLAY:-:0}" $VENV/bin/python3 -m thermalcanary'
 Path=$DATA_DIR
 Hidden=false
 NoDisplay=false
@@ -249,15 +249,15 @@ EOF
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Done! ==="
-echo "  App:       $DATA_DIR/sysgauge/"
+echo "  App:       $DATA_DIR/thermalcanary/"
 echo "  Config:    $CFG_DIR/config.yaml"
 echo "  Autostart: enabled (8s delay after login)"
 echo ""
-echo "  SysGauge runs entirely as your user — no root needed at runtime."
+echo "  ThermalCanary runs entirely as your user — no root needed at runtime."
 echo ""
-echo "→ Launching SysGauge..."
-pkill -f "python3 -m sysgauge" 2>/dev/null || true
+echo "→ Launching ThermalCanary..."
+pkill -f "python3 -m thermalcanary" 2>/dev/null || true
 sleep 0.5
-rm -f "${XDG_RUNTIME_DIR:-$HOME/.cache/sysgauge}/sysgauge.lock"
-DISPLAY="${DISPLAY:-:0}" "$VENV/bin/python3" -m sysgauge &
+rm -f "${XDG_RUNTIME_DIR:-$HOME/.cache/thermalcanary}/thermalcanary.lock"
+DISPLAY="${DISPLAY:-:0}" "$VENV/bin/python3" -m thermalcanary &
 disown

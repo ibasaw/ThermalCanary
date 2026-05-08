@@ -20,6 +20,13 @@ _VALIDATORS = {
     'inner_color':          _is_hex,
     'track_color':          _is_hex,
     'tick_color':           _is_hex,
+    'tray_minimize_to_tray': lambda v: isinstance(v, bool),
+    'tray_warning_shown':    lambda v: isinstance(v, bool),
+    'first_run_done':        lambda v: isinstance(v, bool),
+    'gpu_index':             lambda v: isinstance(v, int) and 0 <= v < 32,
+    'gpu_backend':           lambda v: isinstance(v, str) and v in ('auto', 'nvml', 'amdgpu'),
+    'cpu_temp_source':       lambda v: isinstance(v, str),
+    'fan_source':            lambda v: isinstance(v, str),
 }
 
 DEFAULTS = {
@@ -32,6 +39,13 @@ DEFAULTS = {
     'track_color':  '#332e55',
     'tick_color':   '#3d3860',
     'panel_radius': 18,
+    'tray_minimize_to_tray': True,
+    'tray_warning_shown':    False,
+    'first_run_done':        False,
+    'gpu_index':             0,
+    'gpu_backend':           'auto',
+    'cpu_temp_source':       'auto',
+    'fan_source':            'auto',
 }
 
 
@@ -41,7 +55,7 @@ class Config(QObject):
     def __init__(self):
         super().__init__()
         cfg_dir = Path(os.environ.get('XDG_CONFIG_HOME', '~/.config')).expanduser()
-        self._path = cfg_dir / 'sysgauge' / 'config.yaml'
+        self._path = cfg_dir / 'thermalcanary' / 'config.yaml'
         self._data = dict(DEFAULTS)
         self._load()
         self._save_timer = QTimer(self)
