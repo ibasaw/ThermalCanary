@@ -60,10 +60,11 @@ class Gauge(QWidget):
         self.crit        = crit
         self.decimals    = decimals
         self.blink_above = blink_above
-        self._target     = float(lo)
-        self._cur        = float(lo)
-        self._blink_on   = True
+        self._target      = float(lo)
+        self._cur         = float(lo)
+        self._blink_on    = True
         self._blink_frame = 0
+        self._unavailable = False
         self._gradient_stops = self._build_stops()
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -104,9 +105,21 @@ class Gauge(QWidget):
         return stops[-1][1]
 
     def set_value(self, v: float):
+        if self._unavailable:
+            return
         self._target = max(self.lo, min(self.hi, float(v)))
 
+    def set_unavailable(self, flag: bool):
+        self._unavailable = flag
+        self.update()
+
+    def set_label(self, text: str):
+        self.title = text
+        self.update()
+
     def _step(self):
+        if self._unavailable:
+            return
         d = self._target - self._cur
         if abs(d) > 0.02:
             self._cur += d * 0.14
@@ -122,6 +135,29 @@ class Gauge(QWidget):
             self._blink_frame = 0
             self.update()
 
+    def _paint_unavailable(self, p: QPainter, cx: float, cy: float,
+                           r: float, rect: QRectF, cfg):
+        dim = QColor('#2e2a48')
+        p.setPen(QPen(dim, self._TRACK, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.drawArc(rect, int(self._START * 16), int(-self._SPAN * 16))
+        self._draw_ticks(p, cx, cy, r)
+        ir    = r - self._ARC - 8
+        irect = QRectF(cx - ir, cy - ir, ir * 2, ir * 2)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(cfg.get('inner_color')))
+        p.drawEllipse(irect)
+        vfont = QFont('Roboto Mono', max(12, int(ir * 0.40)), QFont.Weight.Bold)
+        p.setFont(vfont)
+        p.setPen(QColor('#3a3555'))
+        p.drawText(QRectF(cx - ir, cy - ir * 0.62, ir * 2, ir * 0.58),
+                   Qt.AlignmentFlag.AlignCenter, '—')
+        tfont = QFont('Inter', max(8, int(ir * 0.16)), QFont.Weight.Bold)
+        tfont.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.5)
+        p.setFont(tfont)
+        p.setPen(QColor('#3a3555'))
+        p.drawText(QRectF(cx - ir, cy + ir * 0.40, ir * 2, ir * 0.40),
+                   Qt.AlignmentFlag.AlignCenter, self.title.upper())
+
     def paintEvent(self, _event):
         cfg = self._config
         p = QPainter(self)
@@ -136,6 +172,12 @@ class Gauge(QWidget):
         cx    = w / 2
         cy    = h / 2
         rect  = QRectF(cx - r, cy - r, diam, diam)
+
+        if self._unavailable:
+            self._paint_unavailable(p, cx, cy, r, rect, cfg)
+            p.end()
+            return
+
         span  = (self.hi - self.lo) or 1.0
         ratio = max(0.0, min(1.0, (self._cur - self.lo) / span))
         col   = self._color_for(ratio)

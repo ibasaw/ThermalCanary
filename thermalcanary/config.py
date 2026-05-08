@@ -20,7 +20,6 @@ _VALIDATORS = {
     'default_screen_uuid':  _is_uuid5,
     'poll_ms':              lambda v: isinstance(v, int) and 100 <= v <= 60000,
     'smooth_n':             lambda v: isinstance(v, int) and 1 <= v <= 100,
-    'panel_radius':         lambda v: isinstance(v, int) and 0 <= v <= 100,
     'bg_color':             _is_hex,
     'inner_color':          _is_hex,
     'track_color':          _is_hex,
@@ -29,7 +28,8 @@ _VALIDATORS = {
     'tray_warning_shown':    lambda v: isinstance(v, bool),
     'first_run_done':        lambda v: isinstance(v, bool),
     'gpu_index':             lambda v: isinstance(v, int) and 0 <= v < 32,
-    'gpu_backend':           lambda v: isinstance(v, str) and v in ('auto', 'nvml', 'amdgpu'),
+    'gpu_backend':           lambda v: isinstance(v, str) and v in ('auto', 'nvml', 'amdgpu', 'intel'),
+    'gpu_card':              lambda v: isinstance(v, str) and v.startswith('card') and v[4:].isdigit(),
     'cpu_temp_source':       lambda v: isinstance(v, str),
 }
 
@@ -44,12 +44,12 @@ DEFAULTS = {
     'inner_color':  '#1e1a35',
     'track_color':  '#332e55',
     'tick_color':   '#3d3860',
-    'panel_radius': 18,
     'tray_minimize_to_tray': True,
     'tray_warning_shown':    False,
     'first_run_done':        False,
     'gpu_index':             0,
     'gpu_backend':           'auto',
+    'gpu_card':              'card0',
     'cpu_temp_source':       'auto',
 }
 

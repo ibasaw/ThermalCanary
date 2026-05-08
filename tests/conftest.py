@@ -37,7 +37,7 @@ def mock_pynvml(mocker):
     nvml.nvmlDeviceGetFanSpeed.return_value = 42
     nvml.nvmlDeviceGetMemoryInfo.return_value = mem
     nvml.NVML_TEMPERATURE_GPU = 0
-    mocker.patch("thermalcanary.sensor.pynvml", nvml)
+    mocker.patch("thermalcanary.nvidia.pynvml", nvml)
     return nvml
 
 

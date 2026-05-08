@@ -2,8 +2,17 @@ venv/
 .venv/
 __pycache__/
 *.pyc
+*.pyo
 .idea/
 *.swp
 CLAUDE.md
+scripts/
+.serena/
 .coverage
 htmlcov/
+dist/
+build/
+*.egg-info/
+mutants/
+pyproject.toml.mutmut_tmp
+.mutmut-cache

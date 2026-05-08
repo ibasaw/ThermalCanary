@@ -15,11 +15,80 @@ from thermalcanary.settings import SettingsSidebar, SIDEBAR_W
 from thermalcanary.tray import TrayController
 
 try:
-    import sysgauge_pro as _pro
+    import thermalcanary_pro as _pro
     PRO = True
 except ImportError:
     _pro = None
     PRO = False
+
+
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setModal(True)
+
+        from thermalcanary import __version__
+
+        wrap = QWidget(self)
+        wrap.setObjectName('wrap')
+        wrap.setStyleSheet(
+            '#wrap { background:#1a1630; border:1px solid #443e70; border-radius:12px; }')
+
+        title = QLabel('Thermal Canary')
+        title.setStyleSheet(
+            'color:#ffffff; font-family:Inter; font-size:16px; font-weight:bold;')
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        version = QLabel(f'v{__version__}')
+        version.setStyleSheet('color:#7c6ef5; font-family:Inter; font-size:12px;')
+        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        desc = QLabel(
+            'Linux hardware monitor for dedicated display panels.\n'
+            'CPU temp · CPU usage · RAM · GPU temp · GPU fan · GPU VRAM')
+        desc.setStyleSheet('color:#aaaacc; font-family:Inter; font-size:12px;')
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setWordWrap(True)
+
+        link = QLabel('<a href="https://github.com/ibasaw/thermalcanary"'
+                      ' style="color:#7c6ef5;">github.com/ibasaw/thermalcanary</a>')
+        link.setStyleSheet('font-family:Inter; font-size:11px;')
+        link.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        link.setOpenExternalLinks(True)
+
+        sep = QWidget()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet('background:#332e55;')
+
+        mit = QLabel('MIT License — free and open source')
+        mit.setStyleSheet('color:#665e88; font-family:Inter; font-size:10px;')
+        mit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        btn_close = QPushButton('Close')
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet(
+            'QPushButton { background:#252040; border:1px solid #443e70; border-radius:6px;'
+            ' color:#aaa; font-family:Inter; font-size:12px; padding:6px 20px; }'
+            'QPushButton:hover { background:#2d2850; color:#fff; }')
+        btn_close.clicked.connect(self.accept)
+
+        inner = QVBoxLayout(wrap)
+        inner.setContentsMargins(32, 28, 32, 24)
+        inner.setSpacing(10)
+        inner.addWidget(title)
+        inner.addWidget(version)
+        inner.addWidget(desc)
+        inner.addWidget(link)
+        inner.addWidget(sep)
+        inner.addWidget(mit)
+        inner.addSpacing(4)
+        inner.addWidget(btn_close, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(wrap)
 
 
 class QuitDialog(QDialog):
@@ -161,6 +230,7 @@ class ThermalCanary(QWidget):
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.start)
         self._worker.reading.connect(self._on_reading)
+        self._worker.gpu_ready.connect(self._on_gpu_ready)
         self._thread.start()
 
         # Sidebar is an overlay — NOT in the layout — so its minimumSizeHint
@@ -189,7 +259,9 @@ class ThermalCanary(QWidget):
         self._close_btn.clicked.connect(self._confirm_quit)
         self._close_btn.raise_()
 
-        self._tray = TrayController(self, icon_path, config, on_quit=self._confirm_quit)
+        self._tray = TrayController(self, icon_path, config,
+                                    on_quit=self._confirm_quit,
+                                    on_about=self._show_about)
 
         QShortcut(QKeySequence('Ctrl+,'), self, self.toggle_settings)
         esc = QShortcut(QKeySequence('Escape'), self)
@@ -240,6 +312,19 @@ class ThermalCanary(QWidget):
         if not self._sidebar_open:
             self._sidebar.hide()
             self._sidebar.setGeometry(self.width(), 0, 0, self.height())
+
+    def _on_gpu_ready(self, found: bool, fan_label: str):
+        if not found:
+            for g in (self.g_gpu_t, self.g_fan, self.g_vram):
+                g.set_unavailable(True)
+        elif fan_label != 'GPU Fan':
+            self.g_fan.set_label(fan_label)
+
+    def _show_about(self):
+        dlg = AboutDialog(self)
+        dlg.adjustSize()
+        dlg.move(self.geometry().center() - dlg.rect().center())
+        dlg.exec()
 
     def _confirm_quit(self):
         dlg = QuitDialog(self)

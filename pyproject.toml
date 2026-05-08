@@ -1,6 +1,10 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "thermalcanary"
-version = "0.1.0"
+version = "1.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "PyQt6>=6.5.0",
@@ -23,3 +27,23 @@ addopts = "--cov=thermalcanary --cov-report=term-missing"
 
 [tool.coverage.run]
 omit = ["thermalcanary/__main__.py"]
+
+[dependency-groups]
+dev = [
+    "mutmut>=3.5.0",
+]
+
+[tool.mutmut]
+paths_to_mutate = [
+    "thermalcanary/config.py",
+    "thermalcanary/sensor.py",
+    "thermalcanary/gauge.py",
+    "thermalcanary/screens.py",
+    "thermalcanary/amd.py",
+    "thermalcanary/intel.py",
+    "thermalcanary/nvidia.py",
+    "thermalcanary/_gpu_sysfs.py",
+    "thermalcanary/tray.py",
+    "thermalcanary/sensor_select.py",
+]
+runner = "python -m pytest -x -q --no-header --no-cov --ignore=tests/test_app.py"

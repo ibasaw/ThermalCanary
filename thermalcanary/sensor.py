@@ -1,28 +1,47 @@
 import psutil
-import pynvml
 from collections import deque
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot
 from thermalcanary.config import Config
 
 
 class SensorWorker(QObject):
-    reading = pyqtSignal(float, float, float, float, float, float)
+    reading   = pyqtSignal(float, float, float, float, float, float)
+    gpu_ready = pyqtSignal(bool, str)   # (gpu_found, fan_gauge_label)
 
     def __init__(self, config: Config):
         super().__init__()
         self._config = config
         self._timer: QTimer | None = None
-        self._gpu = None
+        self._gpu_reader = None
         n = config.get('smooth_n')
         self._cpu_t_buf: deque[float] = deque(maxlen=n)
         self._cpu_u_buf: deque[float] = deque(maxlen=n)
 
+    def _init_gpu(self):
+        backend = self._config.get('gpu_backend')
+        if backend in ('auto', 'nvml'):
+            try:
+                from thermalcanary.nvidia import NvidiaGpuReader
+                self._gpu_reader = NvidiaGpuReader(self._config.get('gpu_index'))
+                return
+            except Exception:
+                if backend == 'nvml':
+                    return
+        if backend == 'amdgpu':
+            from thermalcanary.amd import AmdGpuReader
+            self._gpu_reader = AmdGpuReader(self._config.get('gpu_card'))
+        elif backend == 'intel':
+            from thermalcanary.intel import IntelGpuReader
+            self._gpu_reader = IntelGpuReader(self._config.get('gpu_card'))
+
     def start(self):
-        try:
-            pynvml.nvmlInit()
-            self._gpu = pynvml.nvmlDeviceGetHandleByIndex(0)
-        except pynvml.NVMLError:
-            self._gpu = None
+        self._init_gpu()
+
+        found = self._gpu_reader is not None
+        fan_label = 'GPU Fan'
+        if found and not self._gpu_reader.has_fan and hasattr(self._gpu_reader, 'gpu_busy'):
+            fan_label = 'GPU Load'
+        self.gpu_ready.emit(found, fan_label)
 
         psutil.cpu_percent(interval=None)
 
@@ -35,10 +54,8 @@ class SensorWorker(QObject):
     def stop(self):
         if self._timer:
             self._timer.stop()
-        try:
-            pynvml.nvmlShutdown()
-        except Exception:
-            pass
+        if self._gpu_reader is not None:
+            self._gpu_reader.shutdown()
 
     @pyqtSlot(int)
     def set_interval(self, ms: int):
@@ -95,14 +112,6 @@ class SensorWorker(QObject):
             return 0.0
 
     def _gpu_stats(self) -> tuple[float, float, float]:
-        if self._gpu is None:
+        if self._gpu_reader is None:
             return 0.0, 0.0, 0.0
-        try:
-            temp = float(pynvml.nvmlDeviceGetTemperature(
-                self._gpu, pynvml.NVML_TEMPERATURE_GPU))
-            fan  = float(pynvml.nvmlDeviceGetFanSpeed(self._gpu))
-            mem  = pynvml.nvmlDeviceGetMemoryInfo(self._gpu)
-            vram = mem.used / mem.total * 100.0
-            return temp, fan, vram
-        except pynvml.NVMLError:
-            return 0.0, 0.0, 0.0
+        return self._gpu_reader.stats()

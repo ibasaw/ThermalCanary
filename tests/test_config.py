@@ -62,3 +62,42 @@ def test_unknown_yaml_key_ignored(tmp_path, monkeypatch):
     cfg_file.write_text(yaml.safe_dump({"totally_unknown_key": 42}))
     cfg = Config()  # must not crash
     assert "totally_unknown_key" not in DEFAULTS
+
+
+def test_clamp_uuid_match(tmp_config, make_qscreen):
+    from thermalcanary.screens import screen_uuid
+    s0 = make_qscreen("HDMI-1", "Dell", "U2722D", "SN001")
+    s1 = make_qscreen("DP-1",   "LG",   "27GL83A", "SN002")
+    uuid1 = screen_uuid(s1)
+    tmp_config.set('default_screen_uuid', uuid1)
+    tmp_config.clamp_screen_indices([s0, s1])
+    assert tmp_config.get('screen_index') == 1
+
+
+def test_clamp_index_fallback(tmp_config, make_qscreen):
+    s0 = make_qscreen("HDMI-1")
+    s1 = make_qscreen("DP-1")
+    tmp_config.set('default_screen_uuid', None)
+    tmp_config.set('default_screen_index', 1)
+    tmp_config.clamp_screen_indices([s0, s1])
+    assert tmp_config.get('screen_index') == 1
+    assert tmp_config.get('default_screen_uuid') is not None
+
+
+def test_clamp_defaults_to_zero(tmp_config, make_qscreen):
+    s0 = make_qscreen("HDMI-1")
+    tmp_config.set('default_screen_uuid', None)
+    tmp_config.set('default_screen_index', None)
+    tmp_config.clamp_screen_indices([s0])
+    assert tmp_config.get('screen_index') == 0
+
+
+def test_clamp_empty_screen_list_no_crash(tmp_config):
+    tmp_config.clamp_screen_indices([])   # must not raise
+
+
+def test_save_now_writes_without_debounce(tmp_config, tmp_path):
+    tmp_config.set("smooth_n", 7)
+    tmp_config.save_now()
+    data = yaml.safe_load((tmp_path / "thermalcanary" / "config.yaml").read_text())
+    assert data["smooth_n"] == 7

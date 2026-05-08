@@ -177,6 +177,14 @@ class SettingsSidebar(QWidget):
         reset_btn.clicked.connect(self._reset)
         outer.addWidget(reset_btn)
 
+        about_btn = QPushButton('About')
+        about_btn.setStyleSheet(
+            'QPushButton { background:transparent; border:none; '
+            'padding:6px; color:#555e88; font-size:11px; }'
+            'QPushButton:hover { color:#9080ff; }')
+        about_btn.clicked.connect(self._show_about)
+        outer.addWidget(about_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
+
         self._stack.addWidget(settings_page)
 
         if self._pro:
@@ -337,6 +345,13 @@ class SettingsSidebar(QWidget):
         btn_row.addStretch()
         btn_row.addWidget(ok_btn)
         inner.addLayout(btn_row)
+        dlg.adjustSize()
+        dlg.move(self.mapToGlobal(self.rect().center()) - dlg.rect().center())
+        dlg.exec()
+
+    def _show_about(self):
+        from thermalcanary.app import AboutDialog
+        dlg = AboutDialog(self)
         dlg.adjustSize()
         dlg.move(self.mapToGlobal(self.rect().center()) - dlg.rect().center())
         dlg.exec()

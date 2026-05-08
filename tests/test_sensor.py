@@ -81,3 +81,107 @@ def test_poll_emits_reading_signal(tmp_config, mock_psutil_temps, mock_pynvml, m
     assert cpu_u == 45.0
     assert mem == 60.0
     assert pytest.approx(gpu_vram, abs=0.1) == 25.0
+
+
+def test_start_emits_gpu_ready_found(tmp_config, mock_pynvml, qtbot):
+    worker = SensorWorker(tmp_config)
+    with qtbot.waitSignal(worker.gpu_ready, timeout=500) as blocker:
+        worker.start()
+    found, label = blocker.args
+    assert found is True
+    assert label == 'GPU Fan'
+
+
+def test_start_emits_gpu_ready_not_found(tmp_config, mocker, qtbot):
+    mocker.patch("thermalcanary.nvidia.pynvml.nvmlInit", side_effect=Exception("no gpu"))
+    tmp_config.set('gpu_backend', 'auto')
+    worker = SensorWorker(tmp_config)
+    with qtbot.waitSignal(worker.gpu_ready, timeout=500) as blocker:
+        worker.start()
+    found, label = blocker.args
+    assert found is False
+
+
+def test_stop_shuts_down_reader(tmp_config, mock_pynvml, qtbot):
+    worker = SensorWorker(tmp_config)
+    worker.start()
+    assert worker._gpu_reader is not None
+    worker.stop()
+    mock_pynvml.nvmlShutdown.assert_called_once()
+
+
+def test_stop_with_no_reader_no_crash(tmp_config, mocker):
+    mocker.patch("thermalcanary.nvidia.pynvml.nvmlInit", side_effect=Exception("no gpu"))
+    tmp_config.set('gpu_backend', 'auto')
+    worker = SensorWorker(tmp_config)
+    worker.start()
+    worker.stop()   # must not raise
+
+
+def test_set_interval_updates_timer(tmp_config, mock_pynvml):
+    worker = SensorWorker(tmp_config)
+    worker.start()
+    worker.set_interval(2000)
+    assert worker._timer.interval() == 2000
+    worker.stop()
+
+
+def test_set_smooth_n_resizes_buffers(tmp_config, mock_pynvml):
+    worker = SensorWorker(tmp_config)
+    worker.start()
+    worker.set_smooth_n(3)
+    assert worker._cpu_t_buf.maxlen == 3
+    assert worker._cpu_u_buf.maxlen == 3
+    worker.stop()
+
+
+def test_init_gpu_amd_backend(tmp_config, mocker):
+    tmp_config.set('gpu_backend', 'amdgpu')
+    fake_reader = mocker.MagicMock()
+    fake_reader.has_fan = True
+    mocker.patch("thermalcanary.amd.AmdGpuReader", return_value=fake_reader)
+    worker = SensorWorker(tmp_config)
+    worker._init_gpu()
+    assert worker._gpu_reader is fake_reader
+
+
+def test_init_gpu_intel_backend(tmp_config, mocker):
+    tmp_config.set('gpu_backend', 'intel')
+    fake_reader = mocker.MagicMock()
+    fake_reader.has_fan = False
+    mocker.patch("thermalcanary.intel.IntelGpuReader", return_value=fake_reader)
+    worker = SensorWorker(tmp_config)
+    worker._init_gpu()
+    assert worker._gpu_reader is fake_reader
+
+
+def test_start_amd_no_fan_emits_gpu_load_label(tmp_config, mocker, qtbot):
+    tmp_config.set('gpu_backend', 'amdgpu')
+    fake_reader = mocker.MagicMock()
+    fake_reader.has_fan = False
+    fake_reader.gpu_busy = mocker.MagicMock()
+    mocker.patch("thermalcanary.amd.AmdGpuReader", return_value=fake_reader)
+    worker = SensorWorker(tmp_config)
+    with qtbot.waitSignal(worker.gpu_ready, timeout=500) as blocker:
+        worker.start()
+    found, label = blocker.args
+    assert found is True
+    assert label == 'GPU Load'
+
+
+def test_cpu_temp_unknown_chip_falls_back_to_any(tmp_config, mocker):
+    mocker.patch(
+        "thermalcanary.sensor.psutil.sensors_temperatures",
+        return_value={"acpitz": [STemp("temp1", 45.0, 100.0, 105.0)]},
+    )
+    worker = SensorWorker(tmp_config)
+    assert worker._cpu_temp() == 45.0
+
+
+def test_cpu_temp_no_chips_returns_zero(tmp_config, mocker):
+    mocker.patch(
+        "thermalcanary.sensor.psutil.sensors_temperatures",
+        return_value={},
+    )
+    worker = SensorWorker(tmp_config)
+    assert worker._cpu_temp() == 0.0

@@ -20,17 +20,27 @@ def _detect_gpus() -> list[dict]:
     except Exception:
         pass
 
-    # AMD via sysfs hwmon
+    # AMD + Intel via sysfs hwmon
+    _SYSFS_BACKENDS = {'amdgpu': 'amdgpu', 'xe': 'intel', 'i915': 'intel'}
+    _VENDOR_LABELS  = {'amdgpu': 'AMD', 'intel': 'Intel'}
+    seen_cards: set[str] = set()
     for name_path in sorted(glob.glob('/sys/class/drm/card*/device/hwmon/hwmon*/name')):
         try:
-            if 'amdgpu' in open(name_path).read():
-                card = name_path.split('/')[4]
-                gpus.append({
-                    'index': len(gpus),
-                    'name': f'AMD GPU ({card})',
-                    'backend': 'amdgpu',
-                    'card': card,
-                })
+            hwmon_name = open(name_path).read().strip()
+            backend = _SYSFS_BACKENDS.get(hwmon_name)
+            if not backend:
+                continue
+            card = name_path.split('/')[4]
+            if card in seen_cards:
+                continue
+            seen_cards.add(card)
+            vendor = _VENDOR_LABELS[backend]
+            gpus.append({
+                'index': len(gpus),
+                'name': f'{vendor} GPU ({card})',
+                'backend': backend,
+                'card': card,
+            })
         except OSError:
             pass
 
@@ -105,6 +115,13 @@ class _FirstRunDialog(QDialog):
         return self._selected
 
 
+def _apply_gpu(config, gpu: dict) -> None:
+    config.set('gpu_index',   gpu['index'])
+    config.set('gpu_backend', gpu['backend'])
+    if 'card' in gpu:
+        config.set('gpu_card', gpu['card'])
+
+
 def run_if_needed(config) -> None:
     if config.get('first_run_done'):
         return
@@ -112,14 +129,11 @@ def run_if_needed(config) -> None:
     if len(gpus) <= 1:
         # Single GPU — auto-configure silently
         if gpus:
-            config.set('gpu_index', gpus[0]['index'])
-            config.set('gpu_backend', gpus[0]['backend'])
+            _apply_gpu(config, gpus[0])
         config.set('first_run_done', True)
         return
     dlg = _FirstRunDialog(gpus)
     dlg.exec()
     if dlg.selected_gpu():
-        gpu = dlg.selected_gpu()
-        config.set('gpu_index', gpu['index'])
-        config.set('gpu_backend', gpu['backend'])
+        _apply_gpu(config, dlg.selected_gpu())
     config.set('first_run_done', True)

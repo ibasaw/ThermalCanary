@@ -5,11 +5,12 @@ from PyQt6.QtCore import Qt
 
 
 class TrayController:
-    def __init__(self, window, icon_path: str, config, on_quit=None):
+    def __init__(self, window, icon_path: str, config, on_quit=None, on_about=None):
         self.window = window
         self.tray = None
         self._config = config
         self._on_quit = on_quit or QApplication.instance().quit
+        self._on_about = on_about
 
         if not QSystemTrayIcon.isSystemTrayAvailable():
             if not config.get('tray_warning_shown'):
@@ -25,6 +26,8 @@ class TrayController:
         self._show_action.triggered.connect(self._toggle)
         menu.addAction(self._show_action)
         menu.addSeparator()
+        if self._on_about:
+            menu.addAction(QAction('About', menu, triggered=self._on_about))
         menu.addAction(QAction('Quit', menu, triggered=self._on_quit))
 
         self.tray.setContextMenu(menu)
