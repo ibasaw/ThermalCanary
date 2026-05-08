@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QLabel, QSpinBox, QComboBox, QPushButton,
                               QFrame, QColorDialog, QSizePolicy,
-                              QApplication)
+                              QApplication, QStackedWidget, QTabWidget)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from sysgauge.config import Config, DEFAULTS
@@ -31,10 +31,12 @@ class ColorButton(QPushButton):
 
 
 class SettingsSidebar(QWidget):
-    def __init__(self, config: Config, worker, parent=None):
+    def __init__(self, config: Config, worker, parent=None, pro=None):
         super().__init__(parent)
         self._config = config
         self._worker = worker
+        self._pro = pro
+        self._session_panel = None
         self.setMinimumWidth(0)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -73,7 +75,15 @@ class SettingsSidebar(QWidget):
         """)
 
         cfg = self._config
-        outer = QVBoxLayout(self)
+
+        self._stack = QStackedWidget(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        root_layout.addWidget(self._stack)
+
+        settings_page = QWidget()
+        outer = QVBoxLayout(settings_page)
         outer.setContentsMargins(16, 48, 16, 16)
         outer.setSpacing(6)
 
@@ -146,6 +156,15 @@ class SettingsSidebar(QWidget):
         outer.addLayout(form)
         outer.addStretch()
 
+        if self._pro:
+            pro_btn = QPushButton('Pro Features →')
+            pro_btn.setStyleSheet(
+                'QPushButton { background:#2d2850; border:1px solid #7c6ef5; '
+                'border-radius:4px; padding:8px; color:#7c6ef5; font-weight:bold; }'
+                'QPushButton:hover { background:#3d3870; color:#fff; border-color:#fff; }')
+            pro_btn.clicked.connect(lambda: self._stack.setCurrentIndex(1))
+            outer.addWidget(pro_btn)
+
         reset_btn = QPushButton('Reset to defaults')
         reset_btn.setStyleSheet(
             'QPushButton { background:#2d2850; border:1px solid #443e70; '
@@ -153,6 +172,56 @@ class SettingsSidebar(QWidget):
             'QPushButton:hover { background:#3d3870; color:#fff; }')
         reset_btn.clicked.connect(self._reset)
         outer.addWidget(reset_btn)
+
+        self._stack.addWidget(settings_page)
+
+        if self._pro:
+            self._stack.addWidget(self._build_pro_page())
+
+    def _build_pro_page(self) -> QWidget:
+        from sysgauge_pro import LicensePanel, SessionPanel, HistoryPanel, HealthPanel
+
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+
+        back_btn = QPushButton('← Settings')
+        back_btn.setStyleSheet(
+            'QPushButton { background:#1a1630; border:none; border-bottom:1px solid #332e55; '
+            'border-radius:0; padding:10px 16px; color:#888; text-align:left; }'
+            'QPushButton:hover { color:#fff; }')
+        back_btn.clicked.connect(lambda: self._stack.setCurrentIndex(0))
+        v.addWidget(back_btn)
+
+        tabs = QTabWidget()
+        tabs.setStyleSheet(
+            'QTabWidget::pane { border:none; }'
+            'QTabBar::tab { background:#252040; color:#888; padding:6px 10px; '
+            'font-size:11px; border-bottom:2px solid transparent; }'
+            'QTabBar::tab:selected { color:#7c6ef5; border-bottom:2px solid #7c6ef5; }'
+            'QTabBar::tab:hover { color:#ccc; }')
+
+        self._license_panel = LicensePanel()
+        self._session_panel = SessionPanel()
+        self._history_panel = HistoryPanel()
+        self._health_panel = HealthPanel()
+
+        self._session_panel.session_stopped.connect(lambda _: self._history_panel._load())
+        self._session_panel.history_requested.connect(lambda: tabs.setCurrentWidget(self._history_panel))
+
+        tabs.addTab(self._license_panel, 'License')
+        tabs.addTab(self._session_panel, 'Sessions')
+        tabs.addTab(self._history_panel, 'History')
+        tabs.addTab(self._health_panel, 'Health')
+
+        v.addWidget(tabs)
+        return page
+
+    def push_reading(self, cpu_t: float, gpu_t: float, cpu_u: float,
+                     mem: float, gpu_vram: float) -> None:
+        if self._session_panel is not None:
+            self._session_panel.push(cpu_t, gpu_t, cpu_u, mem, gpu_vram)
 
     def _refresh_combo_items(self):
         default_idx = self._config.get('default_screen_index')

@@ -13,6 +13,13 @@ from sysgauge.sensor import SensorWorker
 from sysgauge.gauge import Gauge
 from sysgauge.settings import SettingsSidebar, SIDEBAR_W
 
+try:
+    import sysgauge_pro as _pro
+    PRO = True
+except ImportError:
+    _pro = None
+    PRO = False
+
 
 class QuitDialog(QDialog):
     def __init__(self, parent=None):
@@ -158,7 +165,7 @@ class SysGauge(QWidget):
         # Sidebar is an overlay — NOT in the layout — so its minimumSizeHint
         # never propagates into WM_NORMAL_HINTS and can't trigger Mutter to
         # drop fullscreen state during the slide animation.
-        self._sidebar = SettingsSidebar(config, self._worker, self)
+        self._sidebar = SettingsSidebar(config, self._worker, self, pro=_pro)
         self._sidebar.setGeometry(self.width(), 0, 0, self.height())
         self._sidebar.hide()
 
@@ -254,6 +261,8 @@ class SysGauge(QWidget):
         self.g_cpu_u.set_value(cpu_u)
         self.g_mem.set_value(mem)
         self.g_vram.set_value(gpu_vram)
+        if PRO:
+            self._sidebar.push_reading(cpu_t, gpu_t, cpu_u, mem, gpu_vram)
 
     def _on_config_changed(self, key: str):
         if key in ('bg_color', 'inner_color', 'track_color', 'tick_color'):
