@@ -101,3 +101,59 @@ def test_save_now_writes_without_debounce(tmp_config, tmp_path):
     tmp_config.save_now()
     data = yaml.safe_load((tmp_path / "thermalcanary" / "config.yaml").read_text())
     assert data["smooth_n"] == 7
+
+
+# --- security hardening tests ---
+
+def _cfg_with_yaml(tmp_path, monkeypatch, data: dict) -> "Config":
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    cfg_file = tmp_path / "thermalcanary" / "config.yaml"
+    cfg_file.parent.mkdir(parents=True)
+    cfg_file.write_text(yaml.safe_dump(data))
+    return Config()
+
+
+@pytest.mark.parametrize("v", ["card0", "card1", "card9", "card10", "card99"])
+def test_gpu_card_valid(tmp_path, monkeypatch, v):
+    cfg = _cfg_with_yaml(tmp_path, monkeypatch, {"gpu_card": v})
+    assert cfg.get("gpu_card") == v
+
+
+@pytest.mark.parametrize("v", ["card²", "card١", "card४"])
+def test_gpu_card_rejects_unicode_digits(tmp_path, monkeypatch, v):
+    cfg = _cfg_with_yaml(tmp_path, monkeypatch, {"gpu_card": v})
+    assert cfg.get("gpu_card") == DEFAULTS["gpu_card"]
+
+
+@pytest.mark.parametrize("v", ["card0/../../etc/passwd", "../evil", "card", "card0a", "card100"])
+def test_gpu_card_rejects_bad_values(tmp_path, monkeypatch, v):
+    cfg = _cfg_with_yaml(tmp_path, monkeypatch, {"gpu_card": v})
+    assert cfg.get("gpu_card") == DEFAULTS["gpu_card"]
+
+
+def test_cpu_temp_source_rejects_oversized(tmp_path, monkeypatch):
+    cfg = _cfg_with_yaml(tmp_path, monkeypatch, {"cpu_temp_source": "x" * 128})
+    assert cfg.get("cpu_temp_source") == DEFAULTS["cpu_temp_source"]
+
+
+def test_cpu_temp_source_accepts_normal(tmp_path, monkeypatch):
+    cfg = _cfg_with_yaml(tmp_path, monkeypatch, {"cpu_temp_source": "coretemp/Package id 0"})
+    assert cfg.get("cpu_temp_source") == "coretemp/Package id 0"
+
+
+def test_malformed_yaml_falls_back_to_defaults(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    cfg_file = tmp_path / "thermalcanary" / "config.yaml"
+    cfg_file.parent.mkdir(parents=True)
+    cfg_file.write_text(": broken: yaml: {{{{")
+    cfg = Config()
+    for key, expected in DEFAULTS.items():
+        assert cfg.get(key) == expected
+
+
+def test_sysfs_env_ignored_without_test_flag(monkeypatch):
+    from thermalcanary.amd import AmdGpuReader
+    monkeypatch.delenv("THERMALCANARY_TEST", raising=False)
+    monkeypatch.setenv("THERMALCANARY_SYSFS_ROOT", "/tmp/evil-path")
+    r = AmdGpuReader(card="card0", sysfs_root=None)
+    assert str(r._device).startswith("/sys/class/drm")

@@ -5,7 +5,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QHBoxLayout, QVBoxLayout,
                              QToolButton, QDialog, QLabel, QPushButton, QLayout)
 from PyQt6.QtCore import (Qt, QTimer, QThread, QPropertyAnimation, QEasingCurve,
-                           QMetaObject, Q_ARG, QRectF, QRect)
+                           QMetaObject, Q_ARG, QRectF, QRect, QEvent)
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QIcon, QShortcut, QKeySequence, QGuiApplication
 
 from thermalcanary.config import Config
@@ -30,11 +30,27 @@ class AboutDialog(QDialog):
         self.setModal(True)
 
         from thermalcanary import __version__
+        from PyQt6.QtGui import QPixmap
 
         wrap = QWidget(self)
         wrap.setObjectName('wrap')
         wrap.setStyleSheet(
             '#wrap { background:#1a1630; border:1px solid #443e70; border-radius:12px; }')
+
+        # Canary icon at the top — try installed location, fall back to source assets.
+        icon_paths = [
+            Path(os.environ.get('XDG_DATA_HOME', '~/.local/share')).expanduser()
+            / 'thermalcanary' / 'assets' / 'icon.png',
+            Path(__file__).resolve().parent.parent / 'assets' / 'icon.png',
+        ]
+        logo = QLabel()
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for p in icon_paths:
+            if p.exists():
+                pix = QPixmap(str(p)).scaledToHeight(
+                    96, Qt.TransformationMode.SmoothTransformation)
+                logo.setPixmap(pix)
+                break
 
         title = QLabel('Thermal Canary')
         title.setStyleSheet(
@@ -75,8 +91,9 @@ class AboutDialog(QDialog):
         btn_close.clicked.connect(self.accept)
 
         inner = QVBoxLayout(wrap)
-        inner.setContentsMargins(32, 28, 32, 24)
+        inner.setContentsMargins(32, 24, 32, 24)
         inner.setSpacing(10)
+        inner.addWidget(logo)
         inner.addWidget(title)
         inner.addWidget(version)
         inner.addWidget(desc)
@@ -186,11 +203,24 @@ class GaugeArea(QWidget):
 
 
 class ThermalCanary(QWidget):
-    def __init__(self, config: Config, icon_path: str = ''):
+    def __init__(self, config: Config, icon: 'QIcon | None' = None):
         super().__init__()
         self._config = config
         self.setWindowTitle('Thermal Canary')
-        self.setWindowFlags(Qt.WindowType.Window)
+        # ╔══════════════════════════════════════════════════════════════════╗
+        # ║  ⚠  DO NOT ADD Qt.WindowType.Tool TO THESE FLAGS                 ║
+        # ║                                                                  ║
+        # ║  Mutter (Ubuntu GNOME) constrains _NET_WM_WINDOW_TYPE_UTILITY    ║
+        # ║  windows to their current monitor — setGeometry() X,Y is        ║
+        # ║  silently DROPPED, only W,H is honored. Cross-monitor switch    ║
+        # ║  becomes impossible. Spent 6+ hours debugging this on 2026-05-09.║
+        # ║                                                                  ║
+        # ║  See: wiki/decisions/pyqt6-mutter-tool-flag-forbidden.md         ║
+        # ╚══════════════════════════════════════════════════════════════════╝
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.FramelessWindowHint
+        )
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -259,7 +289,7 @@ class ThermalCanary(QWidget):
         self._close_btn.clicked.connect(self._confirm_quit)
         self._close_btn.raise_()
 
-        self._tray = TrayController(self, icon_path, config,
+        self._tray = TrayController(self, icon, config,
                                     on_quit=self._confirm_quit,
                                     on_about=self._show_about)
 
@@ -276,6 +306,11 @@ class ThermalCanary(QWidget):
         self._anim.finished.connect(self._on_anim_finished)
         self._sidebar_open = False
         self.setMinimumSize(0, 0)
+
+        # State machine for cross-monitor switching: stash target until
+        # WindowStateChange confirms Mutter has finished un-fullscreening.
+        self._pending_target_geo = None
+        self._pending_target_screen = None
 
         config.changed.connect(self._on_config_changed)
 
@@ -378,7 +413,7 @@ class ThermalCanary(QWidget):
             QMetaObject.invokeMethod(
                 self._worker, 'reset_cpu_buf',
                 Qt.ConnectionType.QueuedConnection)
-        elif key in ('screen_index', 'screen_uuid'):
+        elif key == 'screen_uuid':
             self._move_to_screen_by_uuid(self._config.get('screen_uuid'))
 
     def _move_to_screen_by_uuid(self, target_uuid: str | None):
@@ -388,27 +423,67 @@ class ThermalCanary(QWidget):
             return
         idx = find_index_by_uuid(screens, target_uuid)
         if idx is None:
-            idx = self._config.get('screen_index')
+            idx = self._config.get('screen_index') or 0
         self._move_to_screen(idx)
 
     def _move_to_screen(self, idx: int):
+        # Event-driven state machine for X11/Mutter cross-monitor placement:
+        # - INITIAL placement (not fullscreen): apply geometry directly.
+        # - SWITCH (currently fullscreen): un-fullscreen, wait for Mutter's
+        #   WindowStateChange ack, THEN apply. Mutter clamps ConfigureRequests
+        #   for fullscreen windows; timer-based guesses are racy.
+        # See setWindowFlags() above — Qt.WindowType.Tool is forbidden here:
+        # Mutter constrains UTILITY windows to their current monitor.
         screens = QApplication.instance().screens()
         if not screens:
             return
-        screen = screens[min(max(idx, 0), len(screens) - 1)]
-        geo = screen.geometry()
+        target_screen = screens[min(max(idx, 0), len(screens) - 1)]
+        target_geo = target_screen.geometry()
+
+        self._pending_target_screen = target_screen
+        self._pending_target_geo = target_geo
+
+        if not self.windowHandle():
+            QTimer.singleShot(50, lambda: self._move_to_screen(idx))
+            return
 
         self.setMinimumSize(0, 0)
-        self.showNormal()
-        self.setMinimumSize(0, 0)
 
-        handle = self.windowHandle()
-        if handle:
-            handle.setScreen(screen)
+        if self.isFullScreen():
+            self.showNormal()
+            QTimer.singleShot(400, self._apply_pending_move_if_any)
+        else:
+            self._apply_pending_move()
 
-        self.setGeometry(geo)
-        QTimer.singleShot(50, self.showFullScreen)
-        QTimer.singleShot(100, self._restack_overlay)
+    def _apply_pending_move_if_any(self):
+        if self._pending_target_geo is not None:
+            self._apply_pending_move()
+
+    def _apply_pending_move(self):
+        target_geo = self._pending_target_geo
+        target_screen = self._pending_target_screen
+        if target_geo is None or target_screen is None:
+            return
+        self._pending_target_geo = None
+        self._pending_target_screen = None
+
+        wh = self.windowHandle()
+        if wh is not None:
+            wh.setScreen(target_screen)
+        self.setGeometry(target_geo)
+
+        def _refullscreen():
+            self.showFullScreen()
+            QTimer.singleShot(0, self._restack_overlay)
+
+        QTimer.singleShot(50, _refullscreen)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            # Mutter ack'd un-fullscreen — NOW the ConfigureRequest is honored.
+            if self._pending_target_geo is not None and not self.isFullScreen():
+                self._apply_pending_move()
 
     def closeEvent(self, event):
         if self._tray.tray is not None and self._config.get('tray_minimize_to_tray'):
@@ -434,9 +509,28 @@ class ThermalCanary(QWidget):
         p.end()
 
     def place_on_screen(self):
-        target_uuid = self._config.get('screen_uuid')
+        """Place the window on the configured screen. Always UUID-driven, no index fallback."""
+        # show() first: maps window. 300ms delay: Mutter processes MapNotify
+        # fully before ConfigureRequest is sent.
         self.show()
-        QTimer.singleShot(300, lambda: self._move_to_screen_by_uuid(target_uuid))
+        QTimer.singleShot(300, lambda: self._move_to_screen_by_uuid(self._config.get('screen_uuid')))
+        # Hide from GNOME Dash / Alt+Tab without using Qt.WindowType.Tool (which
+        # would re-introduce the cross-monitor placement bug). Set SKIP_TASKBAR
+        # and SKIP_PAGER via wmctrl after the window is mapped.
+        QTimer.singleShot(500, self._apply_skip_taskbar_pager)
+
+    def _apply_skip_taskbar_pager(self):
+        import subprocess
+        wid = self.winId()
+        if not wid:
+            return
+        try:
+            subprocess.run(
+                ['wmctrl', '-i', '-r', hex(int(wid)),
+                 '-b', 'add,skip_taskbar,skip_pager'],
+                check=False, capture_output=True, timeout=2)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass  # wmctrl missing or timed out — non-fatal
 
 
 _lock_file = None  # module-level ref keeps the fd alive so the lock is never released
@@ -444,6 +538,12 @@ _lock_file = None  # module-level ref keeps the fd alive so the lock is never re
 
 def main():
     import fcntl
+    import argparse
+    from thermalcanary import APP_UUID
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument('--app-id', default=APP_UUID)
+    ap.parse_known_args()  # consume --app-id so Qt doesn't see it as unknown arg
+
     # Force XCB; geometry/fullscreen logic is tuned for X11/XWayland.
     os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
     # GNOME Wayland sessions may not set DISPLAY — target the XWayland socket.
@@ -469,17 +569,22 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName('thermalcanary')
     app.setApplicationDisplayName('Thermal Canary')
+    app.setQuitOnLastWindowClosed(False)
 
-    icon_path = (Path(os.environ.get('XDG_DATA_HOME', '~/.local/share')).expanduser()
-                 / 'thermalcanary' / 'assets' / 'thermalcanary.png')
-    app.setWindowIcon(QIcon.fromTheme('thermalcanary', QIcon(str(icon_path))))
+    fallback_icon_file = (
+        Path(os.environ.get('XDG_DATA_HOME', '~/.local/share')).expanduser()
+        / 'icons' / 'hicolor' / '48x48' / 'apps' / 'thermalcanary.png'
+    )
+    icon = QIcon.fromTheme('thermalcanary', QIcon(str(fallback_icon_file)))
+    app.setWindowIcon(icon)
 
     config = Config()
     config.clamp_screen_indices(app.screens())
+    config.save_now()
 
     from thermalcanary.first_run import run_if_needed
     run_if_needed(config)
 
-    win = ThermalCanary(config, icon_path=str(icon_path))
+    win = ThermalCanary(config, icon=icon)
     win.place_on_screen()
     sys.exit(app.exec())

@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt
 
 
 class TrayController:
-    def __init__(self, window, icon_path: str, config, on_quit=None, on_about=None):
+    def __init__(self, window, icon: QIcon, config, on_quit=None, on_about=None):
         self.window = window
         self.tray = None
         self._config = config
@@ -18,7 +18,7 @@ class TrayController:
                 config.set('tray_warning_shown', True)
             return
 
-        self.tray = QSystemTrayIcon(QIcon(icon_path), parent=window)
+        self.tray = QSystemTrayIcon(icon, parent=window)
         self.tray.setToolTip('Thermal Canary')
 
         menu = QMenu()
@@ -71,7 +71,10 @@ class TrayController:
         self.update_menu_label()
 
     def _raise(self):
-        self.window.showFullScreen()
+        # Do NOT call setWindowFlags() here — it destroys the native QWindow
+        # and forces a remap on the primary monitor. Flags are set once in
+        # ThermalCanary.__init__ and must never change at runtime.
+        self.window.place_on_screen()
         self.window.raise_()
         self.window.activateWindow()
 

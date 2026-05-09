@@ -1,4 +1,6 @@
-# Thermal Canary
+<p align="center">
+  <img src="assets/logo.png" alt="Thermal Canary" width="600">
+</p>
 
 The Linux software for dedicated hardware monitoring screens — like AIDA64's sensor panel, but native to your desktop.
 
@@ -6,6 +8,8 @@ The Linux software for dedicated hardware monitoring screens — like AIDA64's s
 Smooth 60fps animation, rolling average stabilisation, dynamic heat colors. Auto-starts on login.
 
 **Built for dedicated monitoring screens** — works out of the box on stretched panels (1920×480), small IPS monitors, or any secondary display you use as a permanent hardware panel.
+
+> ⚠ **Important** — this is NOT an overlay. Thermal Canary is a fullscreen app intended for a **dedicated monitor**. Don't try to use it as an in-game overlay (use MangoHud for that).
 
 **Fully responsive** — gauges scale to any resolution and orientation: ultrawide, portrait, rotated, compact.
 

@@ -107,14 +107,20 @@ class SettingsSidebar(QWidget):
         self._screens = QApplication.instance().screens()
         self._screen_combo = QComboBox()
         self._refresh_combo_items()
-        si = cfg.get('screen_index')
-        si = si if isinstance(si, int) and si >= 0 else 0
+        # Resolve initial selection by UUID — never trust the integer index alone
+        # because Qt can reorder screens between sessions.
+        from thermalcanary.screens import screen_uuid as _suuid, find_index_by_uuid as _find
+        si = _find(self._screens, cfg.get('screen_uuid'))
+        if si is None:
+            si = cfg.get('screen_index') or 0
         self._screen_combo.setCurrentIndex(min(si, len(self._screens) - 1))
         def _on_screen_changed(i):
-            from thermalcanary.screens import screen_uuid
-            cfg.set('screen_index', i)
+            from thermalcanary.screens import screen_uuid as _su
+            # Set screen_uuid only — _on_config_changed reacts to uuid, not index,
+            # to avoid a double-move (index fires first with stale uuid).
             if 0 <= i < len(self._screens):
-                cfg.set('screen_uuid', screen_uuid(self._screens[i]))
+                cfg.set('screen_index', i)
+                cfg.set('screen_uuid', _su(self._screens[i]))
         self._screen_combo.currentIndexChanged.connect(_on_screen_changed)
         form.addRow('Monitor', self._screen_combo)
 
@@ -236,13 +242,15 @@ class SettingsSidebar(QWidget):
             self._session_panel.push(cpu_t, gpu_t, cpu_u, mem, gpu_vram)
 
     def _refresh_combo_items(self):
-        default_idx = self._config.get('default_screen_index')
+        from thermalcanary.screens import screen_uuid as _suuid
+        default_uuid = self._config.get('default_screen_uuid')
         current = self._screen_combo.currentIndex()
         self._screen_combo.blockSignals(True)
         self._screen_combo.clear()
         for i, s in enumerate(self._screens):
             g = s.availableGeometry()
-            star = ' ★' if i == default_idx else ''
+            # Star by UUID — integer index can be stale after Qt screen reorder.
+            star = ' ★' if _suuid(s) == default_uuid else ''
             pos = f'+{g.x()}' if g.x() >= 0 else str(g.x())
             self._screen_combo.addItem(f'Monitor {i + 1}  {g.width()}×{g.height()} ({s.name()} {pos}){star}')
         self._screen_combo.setCurrentIndex(max(current, 0))

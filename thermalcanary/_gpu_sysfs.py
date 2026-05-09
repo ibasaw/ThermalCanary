@@ -8,7 +8,7 @@ class _SysfsGpuReader:
     _SYSFS_ENV: str = ''
 
     def __init__(self, card: str, sysfs_root: str | None):
-        root = sysfs_root or os.environ.get(self._SYSFS_ENV, '/sys/class/drm')
+        root = sysfs_root or (os.environ.get(self._SYSFS_ENV) if os.environ.get('THERMALCANARY_TEST') else None) or '/sys/class/drm'
         self._device = Path(root) / card / 'device'
         self._hwmon = self._find_hwmon()
 

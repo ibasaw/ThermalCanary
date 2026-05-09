@@ -10,8 +10,8 @@ _HEX = re.compile(r'^#[0-9a-fA-F]{6}$')
 def _is_hex(v): return isinstance(v, str) and bool(_HEX.match(v))
 def _is_screen(v): return isinstance(v, int) and 0 <= v < 32
 
-_UUID5_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$')
-def _is_uuid5(v): return v is None or (isinstance(v, str) and bool(_UUID5_RE.match(v)))
+_TC_UUID_RE = re.compile(r'^thermal-canary-[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$')
+def _is_uuid5(v): return v is None or (isinstance(v, str) and bool(_TC_UUID_RE.match(v)))
 
 _VALIDATORS = {
     'screen_index':         _is_screen,
@@ -29,8 +29,8 @@ _VALIDATORS = {
     'first_run_done':        lambda v: isinstance(v, bool),
     'gpu_index':             lambda v: isinstance(v, int) and 0 <= v < 32,
     'gpu_backend':           lambda v: isinstance(v, str) and v in ('auto', 'nvml', 'amdgpu', 'intel'),
-    'gpu_card':              lambda v: isinstance(v, str) and v.startswith('card') and v[4:].isdigit(),
-    'cpu_temp_source':       lambda v: isinstance(v, str),
+    'gpu_card':              lambda v: isinstance(v, str) and bool(re.fullmatch(r'card[0-9]{1,2}', v)),
+    'cpu_temp_source':       lambda v: isinstance(v, str) and len(v) < 128,
 }
 
 DEFAULTS = {

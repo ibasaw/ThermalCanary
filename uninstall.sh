@@ -18,7 +18,17 @@ echo ""
 read -r -p "Continue? [y/N] " confirm
 [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 
-pkill -f "thermalcanary" 2>/dev/null && echo "→ Stopped running instance" || true
+TC_APP_UUID="99e18195-0d42-5165-826c-b6a04d5ed4d4"
+
+# Kill all running instances by app UUID (zero false positives).
+_tc_pids=$(pgrep -f "$TC_APP_UUID" 2>/dev/null || true)
+if [[ -n "$_tc_pids" ]]; then
+  kill $_tc_pids 2>/dev/null || true
+  sleep 0.5
+  echo "→ Stopped running instance(s)"
+fi
+rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/thermalcanary.lock"
+rm -f "$HOME/.cache/thermalcanary/thermalcanary.lock"
 
 rm -rf "$DATA_DIR"       && echo "→ Removed $DATA_DIR"
 rm -rf "$CFG_DIR"        && echo "→ Removed $CFG_DIR"

@@ -14,6 +14,7 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/thermalcanary"
 CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/thermalcanary"
 VENV="$DATA_DIR/venv"
 DESKTOP="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/thermalcanary.desktop"
+TC_APP_UUID="99e18195-0d42-5165-826c-b6a04d5ed4d4"  # uuid5(DNS, "thermalcanary.ibasaw.io")
 
 AUTO_INSTALL=0
 for arg in "$@"; do
@@ -76,7 +77,7 @@ MISSING_PKGS=()
 INSTALL_CMD=""
 
 check_and_collect_apt() {
-  local pkgs=(python3 python3-venv python3-pip lm-sensors libxcb-cursor0 libxcb-xinerama0)
+  local pkgs=(python3 python3-venv python3-pip lm-sensors libxcb-cursor0 libxcb-xinerama0 wmctrl)
   for pkg in "${pkgs[@]}"; do
     dpkg -s "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
@@ -84,7 +85,7 @@ check_and_collect_apt() {
 }
 
 check_and_collect_dnf() {
-  local pkgs=(python3 python3-pip lm_sensors xcb-util-cursor libxcb)
+  local pkgs=(python3 python3-pip lm_sensors xcb-util-cursor libxcb wmctrl)
   for pkg in "${pkgs[@]}"; do
     rpm -q "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
@@ -92,7 +93,7 @@ check_and_collect_dnf() {
 }
 
 check_and_collect_pacman() {
-  local pkgs=(python python-pip lm_sensors xcb-util-cursor)
+  local pkgs=(python python-pip lm_sensors xcb-util-cursor wmctrl)
   for pkg in "${pkgs[@]}"; do
     pacman -Qi "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
@@ -100,7 +101,7 @@ check_and_collect_pacman() {
 }
 
 check_and_collect_zypper() {
-  local pkgs=(python3 python3-pip lm-sensors xcb-util-cursor libxcb1)
+  local pkgs=(python3 python3-pip lm-sensors xcb-util-cursor libxcb1 wmctrl)
   for pkg in "${pkgs[@]}"; do
     rpm -q "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
   done
@@ -172,12 +173,21 @@ cp -r "$PROJECT_DIR/thermalcanary" "$DATA_DIR/thermalcanary"
 cp -r "$PROJECT_DIR/assets"   "$DATA_DIR/assets"
 
 echo "→ Installing icon..."
-ICON_SRC="$PROJECT_DIR/assets/thermalcanary.png"
+ICON_SRC="$PROJECT_DIR/assets/icon.png"
 HICOLOR="$HOME/.local/share/icons/hicolor"
 for size in 512 256 128 48; do mkdir -p "$HICOLOR/${size}x${size}/apps"; done
-for size in 512 256 128 48; do
-  cp -f "$ICON_SRC" "$HICOLOR/${size}x${size}/apps/thermalcanary.png"
-done
+python3 -c "
+from PIL import Image
+src = Image.open('$ICON_SRC').convert('RGBA')
+for size in [512, 256, 128, 48]:
+    canvas = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    thumb = src.copy()
+    thumb.thumbnail((size, size), Image.LANCZOS)
+    x = (size - thumb.width) // 2
+    y = (size - thumb.height) // 2
+    canvas.paste(thumb, (x, y), thumb)
+    canvas.save(f'$HICOLOR/{size}x{size}/apps/thermalcanary.png', 'PNG')
+"
 gtk-update-icon-cache -f -t "$HICOLOR" 2>/dev/null || true
 
 echo "→ Installing application entry..."
@@ -189,7 +199,7 @@ Type=Application
 Name=Thermal Canary
 Comment=Hardware gauge monitor
 Icon=thermalcanary
-Exec=env QT_QPA_PLATFORM=xcb $VENV/bin/python3 -m thermalcanary
+Exec=env QT_QPA_PLATFORM=xcb $VENV/bin/python3 -m thermalcanary --app-id=$TC_APP_UUID
 Path=$DATA_DIR
 Terminal=false
 Categories=Utility;System;Monitor;
@@ -238,7 +248,7 @@ Type=Application
 Name=Thermal Canary
 Comment=Hardware gauge monitor
 Icon=thermalcanary
-Exec=bash -c 'sleep 8 && QT_QPA_PLATFORM=xcb DISPLAY="${DISPLAY:-:0}" $VENV/bin/python3 -m thermalcanary'
+Exec=bash -c 'sleep 8 && QT_QPA_PLATFORM=xcb $VENV/bin/python3 -m thermalcanary --app-id=$TC_APP_UUID'
 Path=$DATA_DIR
 Hidden=false
 NoDisplay=false
@@ -255,9 +265,16 @@ echo "  Autostart: enabled (8s delay after login)"
 echo ""
 echo "  Thermal Canary runs entirely as your user — no root needed at runtime."
 echo ""
+echo "→ Killing any running Thermal Canary instances..."
+_tc_pids=$(pgrep -f "$TC_APP_UUID" 2>/dev/null || true)
+if [[ -n "$_tc_pids" ]]; then
+  kill $_tc_pids 2>/dev/null || true
+  sleep 0.5
+  echo "  Stopped running instance(s)"
+fi
+rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/thermalcanary.lock"
+rm -f "$HOME/.cache/thermalcanary/thermalcanary.lock"
+
 echo "→ Launching Thermal Canary..."
-pkill -f "python3 -m thermalcanary" 2>/dev/null || true
-sleep 0.5
-rm -f "${XDG_RUNTIME_DIR:-$HOME/.cache/thermalcanary}/thermalcanary.lock"
-DISPLAY="${DISPLAY:-:0}" "$VENV/bin/python3" -m thermalcanary &
+( cd "$DATA_DIR" && DISPLAY="${DISPLAY:-:0}" "$VENV/bin/python3" -m thermalcanary --app-id="$TC_APP_UUID" ) &
 disown
