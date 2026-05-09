@@ -92,3 +92,38 @@ def test_has_fan_true_when_fan_max_present(tmp_path):
     assert r.has_fan
     _, f, _ = r.stats()
     assert f == 50.0  # fan_percent used, not gpu_busy
+
+
+# ---------------------------------------------------------------------------
+# New mutation-killing tests
+# ---------------------------------------------------------------------------
+
+def test_vram_percent_zero_when_total_is_zero(tmp_path):
+    """vram_percent() returns 0.0 when total is 0 (guard against ZeroDivisionError)."""
+    _make_card(tmp_path, vram_used=1024**3, vram_total=0)
+    r = AmdGpuReader('card0', sysfs_root=str(tmp_path))
+    assert r.vram_percent() == 0.0
+
+
+def test_vram_percent_zero_when_used_missing(tmp_path):
+    """vram_percent() returns 0.0 when used file is absent."""
+    device = tmp_path / 'card0' / 'device'
+    device.mkdir(parents=True)
+    (device / 'mem_info_vram_total').write_text('4294967296')
+    # mem_info_vram_used intentionally absent
+    r = AmdGpuReader('card0', sysfs_root=str(tmp_path))
+    assert r.vram_percent() == 0.0
+
+
+def test_vram_percent_correct_calculation(tmp_path):
+    """vram_percent() = used/total*100 (512 MB / 4096 MB = 12.5)."""
+    root = _make_card(tmp_path, vram_used=512 * 1024**2, vram_total=4096 * 1024**2)
+    r = AmdGpuReader('card0', sysfs_root=str(root))
+    assert pytest.approx(r.vram_percent(), abs=0.001) == 12.5
+
+
+def test_vram_percent_full(tmp_path):
+    """vram_percent() = 100.0 when used == total."""
+    root = _make_card(tmp_path, vram_used=4 * 1024**3, vram_total=4 * 1024**3)
+    r = AmdGpuReader('card0', sysfs_root=str(root))
+    assert pytest.approx(r.vram_percent(), abs=0.001) == 100.0

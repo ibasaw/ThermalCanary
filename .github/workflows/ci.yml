@@ -28,3 +28,32 @@ jobs:
         run: uv run pytest tests/ --cov=thermalcanary --cov-report=term-missing
         env:
           QT_QPA_PLATFORM: offscreen
+
+      - name: Run mutation tests (changed files only)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="$(git rev-parse HEAD~1 2>/dev/null || echo '')"
+          fi
+          if [ -n "$BASE" ]; then
+            PATHS=$(git diff --name-only "$BASE" HEAD -- 'thermalcanary/*.py' | tr '\n' ' ')
+          else
+            PATHS=""
+          fi
+          if [ -z "$PATHS" ]; then
+            echo "No thermalcanary/ files changed — skipping mutation tests."
+            exit 0
+          fi
+          echo "Mutating: $PATHS"
+          uv run mutmut run --paths-to-mutate $PATHS || true
+          KILLED=$(uv run mutmut results 2>&1 | grep -oP '\d+(?= killed)' | head -1)
+          SURVIVED=$(uv run mutmut results 2>&1 | grep -oP '\d+(?= survived)' | head -1)
+          KILLED=${KILLED:-0}; SURVIVED=${SURVIVED:-0}
+          TOTAL=$((KILLED + SURVIVED))
+          SCORE=$(python3 -c "print(f'{$KILLED/$TOTAL*100:.1f}' if $TOTAL else '0.0')")
+          echo "Mutation score: ${SCORE}% (${KILLED}/${TOTAL} killed)"
+          python3 -c "import sys; sys.exit(0 if $TOTAL == 0 or $KILLED/$TOTAL >= 0.50 else 1)" \
+            || { echo "FAIL: mutation kill rate below 50%"; exit 1; }
+        env:
+          QT_QPA_PLATFORM: offscreen

@@ -61,19 +61,25 @@ class TrayController:
     def update_menu_label(self):
         if self.tray is None:
             return
-        self._show_action.setText('Hide' if self.window.isVisible() else 'Show')
+        # Use explicit intent flag: isVisible() is unreliable after a DPMS
+        # unmap where the window is gone but the user never asked to hide it.
+        self._show_action.setText('Hide' if not getattr(self, '_user_hidden', False) else 'Show')
 
     def _toggle(self):
-        if self.window.isVisible():
-            self.window.hide()
-        else:
+        if getattr(self, '_user_hidden', False):
+            self._user_hidden = False
             self._raise()
+        else:
+            self._user_hidden = True
+            self.window.hide()
         self.update_menu_label()
 
     def _raise(self):
         # Do NOT call setWindowFlags() here — it destroys the native QWindow
         # and forces a remap on the primary monitor. Flags are set once in
         # ThermalCanary.__init__ and must never change at runtime.
+        if not QApplication.instance().screens():
+            return  # all monitors asleep — _on_screens_changed will retry on wake
         self.window.place_on_screen()
         self.window.raise_()
         self.window.activateWindow()

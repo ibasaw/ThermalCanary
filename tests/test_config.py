@@ -157,3 +157,141 @@ def test_sysfs_env_ignored_without_test_flag(monkeypatch):
     monkeypatch.setenv("THERMALCANARY_SYSFS_ROOT", "/tmp/evil-path")
     r = AmdGpuReader(card="card0", sysfs_root=None)
     assert str(r._device).startswith("/sys/class/drm")
+
+
+# ---------------------------------------------------------------------------
+# New mutation-killing tests
+# ---------------------------------------------------------------------------
+
+def test_clamp_uuid_miss_default_index_in_range(tmp_config, make_qscreen):
+    """UUID miss + default_screen_index in range → sets screen_index to that index."""
+    s0 = make_qscreen("HDMI-1")
+    s1 = make_qscreen("DP-1")
+    tmp_config.set('default_screen_uuid', None)
+    tmp_config.set('default_screen_index', 1)
+    tmp_config.clamp_screen_indices([s0, s1])
+    assert tmp_config.get('screen_index') == 1
+
+
+def test_clamp_uuid_miss_default_index_out_of_range_falls_to_zero(tmp_config, make_qscreen):
+    """UUID miss + default_screen_index >= n → falls back to index 0."""
+    s0 = make_qscreen("HDMI-1")
+    tmp_config.set('default_screen_uuid', None)
+    tmp_config.set('default_screen_index', 5)  # out of range for a 1-screen list
+    tmp_config.clamp_screen_indices([s0])
+    assert tmp_config.get('screen_index') == 0
+
+
+def test_clamp_uuid_miss_out_of_range_sets_default_index_to_zero(tmp_config, make_qscreen):
+    """Fallback to index 0 must also update default_screen_index to 0."""
+    s0 = make_qscreen("HDMI-1")
+    tmp_config.set('default_screen_uuid', None)
+    tmp_config.set('default_screen_index', 99)
+    tmp_config.clamp_screen_indices([s0])
+    assert tmp_config.get('default_screen_index') == 0
+
+
+def test_clamp_uuid_miss_out_of_range_sets_default_uuid(tmp_config, make_qscreen):
+    """Fallback to index 0 must record screen_uuid for screens[0]."""
+    from thermalcanary.screens import screen_uuid
+    s0 = make_qscreen("HDMI-1", "Dell", "U2722D", "SN000")
+    tmp_config.set('default_screen_uuid', None)
+    tmp_config.set('default_screen_index', 99)
+    tmp_config.clamp_screen_indices([s0])
+    assert tmp_config.get('default_screen_uuid') == screen_uuid(s0)
+
+
+def test_clamp_empty_list_no_mutation(tmp_config):
+    """Empty screen list → returns immediately, screen_index unchanged."""
+    tmp_config._data['screen_index'] = 3
+    tmp_config.clamp_screen_indices([])
+    assert tmp_config.get('screen_index') == 3
+
+
+def test_clamp_uuid_match_sets_screen_uuid(tmp_config, make_qscreen):
+    """UUID match → screen_uuid field is refreshed to the matched screen."""
+    from thermalcanary.screens import screen_uuid
+    s0 = make_qscreen("HDMI-1", "Dell", "U2722D", "SN001")
+    s1 = make_qscreen("DP-1",   "LG",   "27GL83A", "SN002")
+    uuid1 = screen_uuid(s1)
+    tmp_config.set('default_screen_uuid', uuid1)
+    tmp_config.clamp_screen_indices([s0, s1])
+    assert tmp_config.get('screen_uuid') == uuid1
+
+
+def test_write_creates_tmp_then_replaces(tmp_config, tmp_path):
+    """_write() must use .yaml.tmp and then rename to final path."""
+    tmp_config.set('poll_ms', 4000)
+    tmp_config.save_now()
+    final = tmp_path / 'thermalcanary' / 'config.yaml'
+    tmp_file = final.with_suffix('.yaml.tmp')
+    assert final.exists()
+    assert not tmp_file.exists()   # tmp was renamed away
+
+
+def test_write_sets_chmod_600(tmp_config, tmp_path):
+    """_write() must chmod the final file to 0o600."""
+    import stat
+    tmp_config.save_now()
+    final = tmp_path / 'thermalcanary' / 'config.yaml'
+    mode = stat.S_IMODE(final.stat().st_mode)
+    assert mode == 0o600
+
+
+def test_load_skips_value_failing_validator(tmp_path, monkeypatch):
+    """_load() must reject values where validator(v) is False and keep default."""
+    import yaml as _yaml
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    cfg_file = tmp_path / "thermalcanary" / "config.yaml"
+    cfg_file.parent.mkdir(parents=True)
+    # poll_ms validator requires 100 <= v <= 60000
+    cfg_file.write_text(_yaml.safe_dump({"poll_ms": 99}))
+    cfg = Config()
+    assert cfg.get("poll_ms") == DEFAULTS["poll_ms"]
+
+
+def test_load_accepts_value_passing_validator(tmp_path, monkeypatch):
+    """_load() must store values where validator(v) is True."""
+    import yaml as _yaml
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    cfg_file = tmp_path / "thermalcanary" / "config.yaml"
+    cfg_file.parent.mkdir(parents=True)
+    cfg_file.write_text(_yaml.safe_dump({"poll_ms": 2500}))
+    cfg = Config()
+    assert cfg.get("poll_ms") == 2500
+
+
+def test_save_timer_is_single_shot(tmp_config):
+    """__init__ must configure save_timer as single-shot."""
+    assert tmp_config._save_timer.isSingleShot()
+
+
+def test_save_timer_interval_is_500ms(tmp_config):
+    """__init__ must set save_timer interval to 500 ms."""
+    assert tmp_config._save_timer.interval() == 500
+
+
+def test_get_known_key_returns_value(tmp_config):
+    """get() returns the stored value for a known key."""
+    tmp_config._data['poll_ms'] = 3000
+    assert tmp_config.get('poll_ms') == 3000
+
+
+def test_load_skips_key_not_in_defaults(tmp_path, monkeypatch):
+    """_load() silently ignores keys absent from DEFAULTS."""
+    import yaml as _yaml
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    cfg_file = tmp_path / "thermalcanary" / "config.yaml"
+    cfg_file.parent.mkdir(parents=True)
+    cfg_file.write_text(_yaml.safe_dump({"no_such_key": 42}))
+    cfg = Config()
+    assert 'no_such_key' not in cfg._data
+
+
+def test_clamp_default_index_equal_to_n_falls_to_zero(tmp_config, make_qscreen):
+    """default_screen_index == n (boundary, out-of-range) → falls back to 0."""
+    s0 = make_qscreen("HDMI-1")
+    tmp_config.set('default_screen_uuid', None)
+    tmp_config.set('default_screen_index', 1)  # exactly == n for a 1-screen list
+    tmp_config.clamp_screen_indices([s0])
+    assert tmp_config.get('screen_index') == 0

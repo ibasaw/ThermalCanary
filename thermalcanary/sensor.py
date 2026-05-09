@@ -91,8 +91,7 @@ class SensorWorker(QObject):
                     chip, _, label = source.rpartition('/')
                     entries = all_temps.get(chip, [])
                     entry = next((e for e in entries if e.label == label), None)
-                    if entry:
-                        return entry.current
+                    return entry.current if entry else 0.0
                 else:
                     entries = all_temps.get(source, [])
                     if entries:

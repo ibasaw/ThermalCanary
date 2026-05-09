@@ -197,7 +197,7 @@ class SettingsSidebar(QWidget):
             self._stack.addWidget(self._build_pro_page())
 
     def _build_pro_page(self) -> QWidget:
-        from sysgauge_pro import LicensePanel, SessionPanel, HistoryPanel, HealthPanel
+        from thermalcanary_pro import LicensePanel, SessionPanel, HistoryPanel, HealthPanel
 
         page = QWidget()
         v = QVBoxLayout(page)
@@ -225,7 +225,7 @@ class SettingsSidebar(QWidget):
         self._history_panel = HistoryPanel()
         self._health_panel = HealthPanel()
 
-        self._session_panel.session_stopped.connect(lambda _: self._history_panel._load())
+        self._session_panel.session_stopped.connect(lambda _: self._history_panel.refresh())
         self._session_panel.history_requested.connect(lambda: tabs.setCurrentWidget(self._history_panel))
 
         tabs.addTab(self._license_panel, 'License')

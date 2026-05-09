@@ -314,6 +314,23 @@ class ThermalCanary(QWidget):
 
         config.changed.connect(self._on_config_changed)
 
+        gui_app = QApplication.instance()
+        gui_app.screenAdded.connect(self._on_screens_changed)
+        gui_app.screenRemoved.connect(self._on_screens_changed)
+        gui_app.primaryScreenChanged.connect(lambda _s: self._on_screens_changed())
+
+    def _on_screens_changed(self, *_):
+        # DPMS standby/wake: Mutter destroys and recreates QScreen objects.
+        # Re-clamp config (UUID → fresh QScreen index) and re-place the window.
+        screens = QApplication.instance().screens()
+        if not screens:
+            return
+        self._config.clamp_screen_indices(screens)
+        # Cancel any in-flight move targeting a now-stale QScreen pointer.
+        self._pending_target_geo = None
+        self._pending_target_screen = None
+        QTimer.singleShot(0, self.place_on_screen)
+
     def toggle_settings(self):
         if self._sidebar_open:
             self._close_settings()
@@ -467,12 +484,22 @@ class ThermalCanary(QWidget):
         self._pending_target_geo = None
         self._pending_target_screen = None
 
+        # The QScreen pointer captured earlier may have been destroyed by a
+        # DPMS cycle between scheduling this call and now. Refuse to proceed
+        # with a stale pointer — _on_screens_changed will re-issue with a
+        # fresh one when the screen comes back.
+        if target_screen not in QApplication.instance().screens():
+            return
+
         wh = self.windowHandle()
-        if wh is not None:
-            wh.setScreen(target_screen)
+        if wh is None:
+            return
+        wh.setScreen(target_screen)
         self.setGeometry(target_geo)
 
         def _refullscreen():
+            if not self.isVisible():
+                return
             self.showFullScreen()
             QTimer.singleShot(0, self._restack_overlay)
 

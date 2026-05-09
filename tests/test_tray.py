@@ -49,7 +49,7 @@ def test_update_menu_label_show_when_hidden(tmp_config, mocker, qtbot):
     window = QWidget()
     qtbot.addWidget(window)
     tray = TrayController(window, QIcon(), tmp_config)
-    window.hide()
+    tray._user_hidden = True
     tray.update_menu_label()
     assert tray._show_action.text() == 'Show'
 
@@ -101,6 +101,7 @@ def test_toggle_shows_hidden_window(tmp_config, mocker, qtbot):
     # place_on_screen is the real-window method that calls show(); simulate it
     window.place_on_screen = mocker.MagicMock(side_effect=window.show)
     tray = TrayController(window, QIcon(), tmp_config)
+    tray._user_hidden = True
     window.hide()
     tray._toggle()
     window.place_on_screen.assert_called_once()
