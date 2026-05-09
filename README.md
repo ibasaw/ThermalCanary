@@ -2,6 +2,14 @@
   <img src="assets/logo.png" alt="Thermal Canary" width="600">
 </p>
 
+<p align="center">
+  <a href="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml"><img src="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/coverage-62%25-yellow.svg" alt="Coverage: 62%">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/platform-Linux-lightgrey.svg" alt="Platform: Linux">
+</p>
+
 The Linux software for dedicated hardware monitoring screens — like AIDA64's sensor panel, but native to your desktop.
 
 6 circular arc gauges (CPU temp, usage, RAM · GPU temp, fan, VRAM) built with PyQt6 and pynvml.
@@ -27,12 +35,12 @@ Plug in a secondary screen (a stretched panel, a small IPS monitor, anything), s
 
 | Row | Gauge | Source |
 |-----|-------|--------|
-| CPU | CPU Temperature | `coretemp / Package id 0` via psutil |
+| CPU | CPU Temperature | `psutil.sensors_temperatures()` — coretemp/k10temp (configurable) |
 | CPU | CPU Usage % | psutil |
 | CPU | RAM Usage % | psutil |
-| GPU | GPU Temperature | pynvml (NVML direct — no subprocess) |
-| GPU | GPU Fan Speed % | pynvml (0% = fans stopped — normal at low GPU load) |
-| GPU | GPU VRAM Usage % | pynvml |
+| GPU | GPU Temperature | NVIDIA: pynvml · AMD: sysfs hwmon · Intel: xe/i915 sysfs |
+| GPU | GPU Fan Speed % | NVIDIA: pynvml · AMD: sysfs hwmon (0% = fans stopped or AMD integrated GPU with no fan) |
+| GPU | GPU VRAM Usage % | NVIDIA: pynvml · AMD: sysfs hwmon · Intel: always 0 (not exposed by driver) |
 
 ## Requirements
 
@@ -49,9 +57,9 @@ The installer checks and installs everything automatically. Here is the full dep
 | `lm-sensors` | Populates `/sys/class/hwmon` for CPU temperature |
 | XCB cursor libs (`libxcb-cursor0` / `xcb-util-cursor`) | Required by PyQt6 on X11 |
 
-**NVIDIA driver** — checked separately. The installer prints distro-specific install instructions if the driver is missing. GPU gauges (temperature, fan, VRAM) require the driver; CPU/RAM gauges work without it.
+**NVIDIA driver** — checked separately. The installer prints distro-specific install instructions if the driver is missing. GPU gauges (temperature, fan, VRAM) require the driver for NVIDIA; AMD and Intel GPUs are read via sysfs without any driver installation.
 
-> **AMD GPU:** not currently supported. `pynvml` is NVIDIA-only. GPU gauges show 0 on AMD hardware; CPU/RAM gauges are unaffected.
+> **GPU backends**: NVIDIA (`pynvml`, direct NVML — no `nvidia-smi` subprocess), AMD (`amdgpu` sysfs hwmon — kernel driver, no extra install), Intel (`xe`/`i915` sysfs hwmon). The backend is auto-detected at startup or can be forced in the Settings sidebar. If no GPU is detected, all three GPU gauges show `—`.
 
 **Python libraries** (installed automatically into a venv):
 
@@ -162,7 +170,7 @@ Removes the app, venv, icon, config, and all desktop entries after confirmation.
 - CPU temp and usage are stabilised with a `deque`-based rolling average
 - **Config** is reactive: `Config(QObject)` emits a signal on every change, all settings apply live
 - Window runs **fullscreen** (`showFullScreen`) — no title bar, fills the entire monitor. This bypasses Mutter's `WM_NORMAL_HINTS` enforcement which otherwise clamps window geometry to `minimumSizeHint`, making maximize unreliable on short or rotated monitors
-- Monitor switching uses `windowHandle().setScreen()` (Qt6 native cross-screen migration) followed by `setGeometry()` + `showFullScreen()` — no wmctrl or subprocess required
+- Monitor switching uses an event-driven state machine: `showNormal()` → wait for `WindowStateChange` (Mutter ack) → `windowHandle().setScreen()` + `setGeometry()` → 50ms → `showFullScreen()`. `wmctrl` is called once after first show to set `_NET_WM_STATE_SKIP_TASKBAR/SKIP_PAGER` (hides the window from GNOME Dash without using `Qt.WindowType.Tool`, which would break cross-monitor placement on Mutter)
 - Monitor indices are validated against actual connected screens at startup — safe on any number of monitors
 - Single-instance lock via `fcntl.flock` on `$XDG_RUNTIME_DIR/thermalcanary.lock`
 - Runs entirely as the logged-in user — no root required at runtime
