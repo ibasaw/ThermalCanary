@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────────────────────
+# Pre-commit hook — fast checks on staged files only.
+# Install: git config core.hooksPath .githooks
+# ──────────────────────────────────────────────────────────────────────────────
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+STAGED_PY=$(git diff --cached --name-only --diff-filter=AM | grep '\.py$' | tr '\n' ' ' || true)
+STAGED_ALL=$(git diff --cached --name-only --diff-filter=AM | tr '\n' ' ' || true)
+
+ERRORS=0
+
+# ── Python: syntax check on staged files ─────────────────────────────────────
+if [ -n "$STAGED_PY" ]; then
+    echo "── Python syntax check (staged files) ──"
+    for f in $STAGED_PY; do
+        if ! uv run --project "$ROOT" python -m py_compile "$f" 2>&1; then
+            echo "  Syntax error in: $f"
+            ERRORS=1
+        fi
+    done
+    [ $ERRORS -eq 0 ] && echo "  OK"
+fi
+
+# ── Bandit: security lint on staged Python files ──────────────────────────────
+if [ -n "$STAGED_PY" ]; then
+    echo "── Bandit security lint (staged files) ──"
+    BANDIT_EXIT=0
+    uv run --project "$ROOT" bandit -q $STAGED_PY || BANDIT_EXIT=$?
+    if [ $BANDIT_EXIT -ne 0 ]; then
+        ERRORS=1
+    fi
+fi
+
+# ── Secrets scan: block commits containing secrets/keys ──────────────────────
+if [ -n "$STAGED_ALL" ]; then
+    echo "── Secrets scan (staged files) ──"
+    SECRET_PATTERNS='(PRIVATE KEY-----)'
+    SECRET_PATTERNS="$SECRET_PATTERNS|(sk_live_[a-zA-Z0-9]{20,})"
+    SECRET_PATTERNS="$SECRET_PATTERNS|(ls_live_[a-zA-Z0-9]{20,})"
+    SECRET_PATTERNS="$SECRET_PATTERNS|(password\s*[:=]\s*['\"][^'\"]{8,}['\"])"
+    SECRET_PATTERNS="$SECRET_PATTERNS|(_HMAC_SECRET\s*=\s*['\"][^'\"]{8,}['\"])"
+
+    if git diff --cached --diff-filter=AM -U0 -- ':!.githooks/pre-commit' | grep -iEq "$SECRET_PATTERNS"; then
+        echo "  Potential secret detected in staged changes!"
+        echo "  Review the diff and remove secrets before committing."
+        ERRORS=1
+    fi
+fi
+
+# ── Result ────────────────────────────────────────────────────────────────────
+if [ $ERRORS -ne 0 ]; then
+    echo ""
+    echo "Pre-commit checks failed. Fix the errors above, then try again."
+    echo "To bypass (emergency only): git commit --no-verify"
+    exit 1
+fi
+
+echo "Pre-commit checks passed."

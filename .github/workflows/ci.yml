@@ -25,7 +25,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run tests with coverage
-        run: uv run pytest tests/ --cov=thermalcanary --cov-report=term-missing
+        run: uv run pytest tests/ --cov=thermalcanary --cov-report=term-missing --cov-report=json
         env:
           QT_QPA_PLATFORM: offscreen
 
@@ -63,9 +63,20 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
 
-      - name: Update mutation badge
+      - name: Update badges
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.mutation.outputs.score != '-1'
         run: |
+          # coverage badge
+          COV=$(python3 -c "import json; d=json.load(open('coverage.json')); print(int(d['totals']['percent_covered_display']))")
+          if   [ "$COV" -ge 90 ]; then COV_COLOR=brightgreen
+          elif [ "$COV" -ge 80 ]; then COV_COLOR=green
+          elif [ "$COV" -ge 70 ]; then COV_COLOR=yellowgreen
+          elif [ "$COV" -ge 60 ]; then COV_COLOR=yellow
+          else                         COV_COLOR=orange
+          fi
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$COV" "$COV_COLOR" \
+            > coverage-badge.json
+          # mutation badge
           S=${{ steps.mutation.outputs.score }}
           if   [ "$S" -ge 80 ]; then COLOR=brightgreen
           elif [ "$S" -ge 70 ]; then COLOR=green
@@ -78,8 +89,8 @@ jobs:
             > mutation-badge.json
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add mutation-badge.json
-          git diff --cached --quiet || git commit -m "chore: update mutation badge [skip ci]"
+          git add coverage-badge.json mutation-badge.json
+          git diff --cached --quiet || git commit -m "chore: update badges [skip ci]"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
