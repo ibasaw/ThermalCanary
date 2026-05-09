@@ -197,7 +197,10 @@ class SettingsSidebar(QWidget):
             self._stack.addWidget(self._build_pro_page())
 
     def _build_pro_page(self) -> QWidget:
-        from thermalcanary_pro import LicensePanel, SessionPanel, HistoryPanel, HealthPanel
+        # Integration contract v1: import these 5 panel classes + FpsWorker from thermalcanary_pro.
+        # If thermalcanary_pro.__contract_version__ != 1, panels may be missing — safe to add a
+        # warning log here in the future.
+        from thermalcanary_pro import LicensePanel, SessionPanel, HistoryPanel, HealthPanel, FpsPanel, FpsWorker
 
         page = QWidget()
         v = QVBoxLayout(page)
@@ -224,14 +227,22 @@ class SettingsSidebar(QWidget):
         self._session_panel = SessionPanel()
         self._history_panel = HistoryPanel()
         self._health_panel = HealthPanel()
+        self._fps_panel = FpsPanel()
 
         self._session_panel.session_stopped.connect(lambda _: self._history_panel.refresh())
         self._session_panel.history_requested.connect(lambda: tabs.setCurrentWidget(self._history_panel))
+
+        # FpsWorker owns its own MangoHud socket — parented to page so Qt cleans it up.
+        self._fps_worker = FpsWorker(parent=page)
+        self._fps_worker.fps_updated.connect(self._fps_panel.push)
+        self._fps_worker.connection_lost.connect(self._fps_panel.on_connection_lost)
+        self._fps_worker.start()
 
         tabs.addTab(self._license_panel, 'License')
         tabs.addTab(self._session_panel, 'Sessions')
         tabs.addTab(self._history_panel, 'History')
         tabs.addTab(self._health_panel, 'Health')
+        tabs.addTab(self._fps_panel, 'FPS')
 
         v.addWidget(tabs)
         return page

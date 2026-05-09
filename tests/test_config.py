@@ -295,3 +295,102 @@ def test_clamp_default_index_equal_to_n_falls_to_zero(tmp_config, make_qscreen):
     tmp_config.set('default_screen_index', 1)  # exactly == n for a 1-screen list
     tmp_config.clamp_screen_indices([s0])
     assert tmp_config.get('screen_index') == 0
+
+
+# ---------------------------------------------------------------------------
+# Mutation-killing: _is_screen, _is_uuid5, _is_hex validators
+# ---------------------------------------------------------------------------
+
+from thermalcanary.config import _is_screen, _is_uuid5, _is_hex
+
+
+@pytest.mark.parametrize("v", [0, 1, 15, 31])
+def test_is_screen_valid(v):
+    assert _is_screen(v) is True
+
+
+@pytest.mark.parametrize("v", [32, -1, 33, 100])
+def test_is_screen_invalid_out_of_range(v):
+    assert _is_screen(v) is False
+
+
+@pytest.mark.parametrize("v", [1.0, "0", None, [1]])
+def test_is_screen_invalid_type(v):
+    assert _is_screen(v) is False
+
+
+def test_is_screen_boundary_zero():
+    assert _is_screen(0) is True
+
+
+def test_is_screen_boundary_31():
+    assert _is_screen(31) is True
+
+
+def test_is_screen_boundary_32_excluded():
+    assert _is_screen(32) is False
+
+
+def test_is_screen_boundary_minus1_excluded():
+    assert _is_screen(-1) is False
+
+
+def test_is_uuid5_none_is_valid():
+    assert _is_uuid5(None) is True
+
+
+def test_is_uuid5_valid_format():
+    v = "thermal-canary-550e8400-e29b-5bcd-a716-446655440000"
+    assert _is_uuid5(v) is True
+
+
+def test_is_uuid5_invalid_prefix():
+    assert _is_uuid5("something-else-550e8400-e29b-5bcd-a716-446655440000") is False
+
+
+def test_is_uuid5_version4_rejected():
+    # Third group must start with 5 for uuid5
+    v = "thermal-canary-550e8400-e29b-4bcd-a716-446655440000"
+    assert _is_uuid5(v) is False
+
+
+def test_is_uuid5_invalid_type():
+    assert _is_uuid5(42) is False
+    assert _is_uuid5(True) is False
+
+
+def test_is_uuid5_empty_string():
+    assert _is_uuid5("") is False
+
+
+def test_is_hex_valid_lowercase():
+    assert _is_hex("#aabbcc") is True
+
+
+def test_is_hex_valid_uppercase():
+    assert _is_hex("#AABBCC") is True
+
+
+def test_is_hex_valid_mixed():
+    assert _is_hex("#aAbBcC") is True
+
+
+def test_is_hex_missing_hash():
+    assert _is_hex("aabbcc") is False
+
+
+def test_is_hex_too_short():
+    assert _is_hex("#aabbc") is False
+
+
+def test_is_hex_too_long():
+    assert _is_hex("#aabbccd") is False
+
+
+def test_is_hex_invalid_chars():
+    assert _is_hex("#xxyyzz") is False
+
+
+def test_is_hex_invalid_type():
+    assert _is_hex(None) is False
+    assert _is_hex(123456) is False
