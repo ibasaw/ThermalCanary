@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml"><img src="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml"><img src="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/coverage-62%25-yellow.svg" alt="Coverage: 62%">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+">
