@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml"><img src="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <img src="https://img.shields.io/badge/coverage-62%25-yellow.svg" alt="Coverage: 62%">
+  <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ibasaw/thermalcanary/main/coverage-badge.json&cacheSeconds=300" alt="Coverage">
   <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ibasaw/thermalcanary/main/mutation-badge.json&cacheSeconds=300" alt="Mutation score">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+">
