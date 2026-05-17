@@ -26,12 +26,25 @@ if [ -n "$STAGED_PY" ]; then
 fi
 
 # ── Bandit: security lint on staged Python files ──────────────────────────────
+# Test files are excluded: pytest legitimately requires `assert` (B101), and the
+# whole point of test fixtures is to use hardcoded paths (B108). Lint app code.
 if [ -n "$STAGED_PY" ]; then
     echo "── Bandit security lint (staged files) ──"
-    BANDIT_EXIT=0
-    uv run --project "$ROOT" bandit -q $STAGED_PY || BANDIT_EXIT=$?
-    if [ $BANDIT_EXIT -ne 0 ]; then
-        ERRORS=1
+    BANDIT_TARGETS=""
+    for f in $STAGED_PY; do
+        case "$f" in
+            tests/*|*/tests/*) ;;
+            *) BANDIT_TARGETS="$BANDIT_TARGETS $f" ;;
+        esac
+    done
+    if [ -n "$BANDIT_TARGETS" ]; then
+        BANDIT_EXIT=0
+        uv run --project "$ROOT" bandit -q $BANDIT_TARGETS || BANDIT_EXIT=$?
+        if [ $BANDIT_EXIT -ne 0 ]; then
+            ERRORS=1
+        fi
+    else
+        echo "  (only test files staged — skipped)"
     fi
 fi
 

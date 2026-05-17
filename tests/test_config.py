@@ -182,23 +182,42 @@ def test_clamp_uuid_miss_default_index_out_of_range_falls_to_zero(tmp_config, ma
     assert tmp_config.get('screen_index') == 0
 
 
-def test_clamp_uuid_miss_out_of_range_sets_default_index_to_zero(tmp_config, make_qscreen):
-    """Fallback to index 0 must also update default_screen_index to 0."""
+def test_clamp_uuid_miss_out_of_range_preserves_default_index(tmp_config, make_qscreen):
+    """Favorite out of reach (DPMS off / cable unplugged): default_screen_index
+    must NOT be overwritten — the favorite has to survive the outage so the
+    window can return home when the monitor reappears."""
     s0 = make_qscreen("HDMI-1")
     tmp_config.set('default_screen_uuid', None)
     tmp_config.set('default_screen_index', 99)
     tmp_config.clamp_screen_indices([s0])
-    assert tmp_config.get('default_screen_index') == 0
+    assert tmp_config.get('default_screen_index') == 99
 
 
-def test_clamp_uuid_miss_out_of_range_sets_default_uuid(tmp_config, make_qscreen):
-    """Fallback to index 0 must record screen_uuid for screens[0]."""
-    from thermalcanary.screens import screen_uuid
+def test_clamp_uuid_miss_out_of_range_preserves_default_uuid(tmp_config, make_qscreen):
+    """Favorite out of reach: default_screen_uuid must NOT be set to a transient
+    fallback screen. If it was None going in (no migration available), it stays
+    None — the user picks a default explicitly via 'Set as default'."""
     s0 = make_qscreen("HDMI-1", "Dell", "U2722D", "SN000")
     tmp_config.set('default_screen_uuid', None)
     tmp_config.set('default_screen_index', 99)
     tmp_config.clamp_screen_indices([s0])
-    assert tmp_config.get('default_screen_uuid') == screen_uuid(s0)
+    assert tmp_config.get('default_screen_uuid') is None
+
+
+def test_clamp_uuid_miss_preserves_existing_default_uuid(tmp_config, make_qscreen):
+    """Bug A guard: when the favorite monitor is currently absent, the saved
+    default_screen_uuid must NOT be clobbered with the current screens[0]'s
+    uuid — otherwise the favorite is lost forever after a DPMS power-cycle
+    in which the laptop wakes before the external display."""
+    favorite_uuid = "thermal-canary-deadbeef-cafe-babe-feed-faceb00cdead"
+    s0 = make_qscreen("eDP-1", "LG", "Internal", "LAPTOP")  # laptop, not the favorite
+    tmp_config.set('default_screen_uuid', favorite_uuid)
+    tmp_config.set('default_screen_index', 1)
+    tmp_config.clamp_screen_indices([s0])
+    assert tmp_config.get('default_screen_uuid') == favorite_uuid
+    assert tmp_config.get('default_screen_index') == 1
+    # Session keys land on the temporary screen so the app is visible meanwhile.
+    assert tmp_config.get('screen_index') == 0
 
 
 def test_clamp_empty_list_no_mutation(tmp_config):
