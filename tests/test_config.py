@@ -173,6 +173,19 @@ def test_clamp_uuid_miss_default_index_in_range(tmp_config, make_qscreen):
     assert tmp_config.get('screen_index') == 1
 
 
+def test_clamp_uuid_none_default_index_zero_migrates(tmp_config, make_qscreen):
+    """Boundary mutation guard: the migration check is `0 <= dsi < n` — index
+    0 is a valid favorite. A mutant tightening this to `1 <= dsi < n` would
+    silently exclude the first screen from auto-migration. Assert that an old
+    config (uuid=None, index=0) gets its uuid promoted on next run."""
+    from thermalcanary.screens import screen_uuid
+    s0 = make_qscreen("HDMI-1", "Dell", "U2722D", "FIRST")
+    tmp_config.set('default_screen_uuid', None)
+    tmp_config.set('default_screen_index', 0)
+    tmp_config.clamp_screen_indices([s0])
+    assert tmp_config.get('default_screen_uuid') == screen_uuid(s0)
+
+
 def test_clamp_uuid_miss_default_index_out_of_range_falls_to_zero(tmp_config, make_qscreen):
     """UUID miss + default_screen_index >= n → falls back to index 0."""
     s0 = make_qscreen("HDMI-1")
@@ -225,6 +238,37 @@ def test_clamp_empty_list_no_mutation(tmp_config):
     tmp_config._data['screen_index'] = 3
     tmp_config.clamp_screen_indices([])
     assert tmp_config.get('screen_index') == 3
+
+
+def test_clamp_single_screen_still_runs(tmp_config, make_qscreen):
+    """Boundary: with exactly 1 screen the function must STILL execute — the
+    early return is `n < 1`, not `n <= 1`. Kills mutants that loosen the
+    boundary (e.g. `n <= 1` or `n < 2`) by detecting that screen_index gets
+    overwritten when the function actually runs."""
+    s0 = make_qscreen("HDMI-1", "Dell", "U2722D", "SOLO")
+    tmp_config._data['screen_index'] = 17   # poison value
+    tmp_config._data['default_screen_uuid'] = None
+    tmp_config._data['default_screen_index'] = None
+    tmp_config.clamp_screen_indices([s0])
+    # If the early return triggered, screen_index would still be 17.
+    assert tmp_config.get('screen_index') == 0
+
+
+def test_clamp_uuid_set_but_no_match_does_not_promote_index(tmp_config, make_qscreen):
+    """Mutation guard: the migration branch must be gated on `resolved is None
+    AND default_uuid is None`. If someone weakens the `and` to `or`, then a
+    stale (no-match) UUID combined with an in-range default_index would trigger
+    an unwanted overwrite of `default_screen_uuid` to the current screen.
+    Exact Bug A regression scenario."""
+    s0 = make_qscreen("eDP-1", "LG", "Internal", "LAPTOP")
+    # Favorite UUID is set but doesn't match the only currently-attached screen.
+    stale_fav = "thermal-canary-deadbeef-cafe-babe-feed-faceb00cdead"
+    tmp_config.set('default_screen_uuid', stale_fav)
+    tmp_config.set('default_screen_index', 0)   # in range for screens=[s0]
+    tmp_config.clamp_screen_indices([s0])
+    # The original `and` keeps the favorite intact; the `or` mutant would have
+    # promoted screens[0]'s real uuid into default_screen_uuid.
+    assert tmp_config.get('default_screen_uuid') == stale_fav
 
 
 def test_clamp_uuid_match_sets_screen_uuid(tmp_config, make_qscreen):
