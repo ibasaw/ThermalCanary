@@ -47,4 +47,4 @@ paths_to_mutate = [
     "thermalcanary/tray.py",
     "thermalcanary/sensor_select.py",
 ]
-runner = "python -m pytest -x -q --no-header --no-cov --ignore=tests/test_app.py"
+runner = "python -m pytest -x -q --no-header --no-cov"

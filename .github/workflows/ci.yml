@@ -48,10 +48,26 @@ jobs:
             exit 0
           fi
           echo "Mutating: $PATHS"
-          uv run mutmut run --paths-to-mutate $PATHS || true
-          KILLED=$(uv run mutmut results 2>&1 | grep -oP '\d+(?= killed)' | head -1)
-          SURVIVED=$(uv run mutmut results 2>&1 | grep -oP '\d+(?= survived)' | head -1)
-          KILLED=${KILLED:-0}; SURVIVED=${SURVIVED:-0}
+          # mutmut 3.x accepts module-name patterns as positional args, NOT
+          # --paths-to-mutate (which was a 2.x flag). Convert path → module.
+          MODS=""
+          for f in $PATHS; do
+            MODS="$MODS $(echo "$f" | sed 's|/|.|g; s|\.py$||').*"
+          done
+          # Fresh cache each CI run so `mutmut results` only lists what we ran.
+          rm -rf mutants/.mutmut-cache mutants/_*.json .mutmut-cache 2>/dev/null || true
+          uv run mutmut run $MODS || true
+          # mutmut 3.x results: one line per non-killed mutant ending in
+          # ": survived" / ": segfault" / ": timeout" / ": not checked".
+          # Killed mutants are hidden — derive from totals.
+          RESULTS=$(uv run mutmut results 2>&1)
+          TOTAL_LINES=$(echo "$RESULTS" | grep -cE "^\s+thermalcanary\." || true)
+          SURVIVED=$(echo "$RESULTS" | grep -cE ": survived$" || true)
+          SEGFAULT=$(echo "$RESULTS" | grep -cE ": segfault$" || true)
+          TIMEOUT=$(echo "$RESULTS" | grep -cE ": timeout$" || true)
+          NOTCHECK=$(echo "$RESULTS" | grep -cE ": not checked$" || true)
+          KILLED=$((TOTAL_LINES - SURVIVED - SEGFAULT - TIMEOUT - NOTCHECK))
+          [ "$KILLED" -lt 0 ] && KILLED=0
           TOTAL=$((KILLED + SURVIVED))
           SCORE=$(python3 -c "print(f'{$KILLED/$TOTAL*100:.0f}' if $TOTAL else '0')")
           echo "Mutation score: ${SCORE}% (${KILLED}/${TOTAL} killed)"
