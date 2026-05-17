@@ -312,6 +312,18 @@ class ThermalCanary(QWidget):
         self._pending_target_geo = None
         self._pending_target_screen = None
 
+        # Monotonic generation: bumped each time the screen topology settles.
+        # Delayed placement callbacks compare against this and abort if stale.
+        self._move_generation = 0
+
+        # Debounce burst of screenAdded/screenRemoved/primaryScreenChanged
+        # events fired by Mutter during DPMS wake — wait for the topology to
+        # settle before re-clamping and re-placing the window.
+        self._screens_settle_timer = QTimer(self)
+        self._screens_settle_timer.setSingleShot(True)
+        self._screens_settle_timer.setInterval(750)
+        self._screens_settle_timer.timeout.connect(self._handle_screens_settled)
+
         config.changed.connect(self._on_config_changed)
 
         gui_app = QApplication.instance()
@@ -320,16 +332,28 @@ class ThermalCanary(QWidget):
         gui_app.primaryScreenChanged.connect(lambda _s: self._on_screens_changed())
 
     def _on_screens_changed(self, *_):
+        # Coalesce the burst. Each new event restarts the timer; we act once
+        # 750ms passes without any further screen events.
+        self._screens_settle_timer.start()
+
+    def _handle_screens_settled(self):
         # DPMS standby/wake: Mutter destroys and recreates QScreen objects.
         # Re-clamp config (UUID → fresh QScreen index) and re-place the window.
         screens = QApplication.instance().screens()
         if not screens:
             return
         self._config.clamp_screen_indices(screens)
-        # Cancel any in-flight move targeting a now-stale QScreen pointer.
+        # Invalidate any in-flight move — its captured QScreen pointer is stale.
         self._pending_target_geo = None
         self._pending_target_screen = None
-        QTimer.singleShot(0, self.place_on_screen)
+        self._move_generation += 1
+        gen = self._move_generation
+        QTimer.singleShot(0, lambda: self._place_on_screen_if_current(gen))
+
+    def _place_on_screen_if_current(self, gen: int):
+        if gen != self._move_generation:
+            return
+        self.place_on_screen()
 
     def toggle_settings(self):
         if self._sidebar_open:
@@ -431,6 +455,11 @@ class ThermalCanary(QWidget):
                 self._worker, 'reset_cpu_buf',
                 Qt.ConnectionType.QueuedConnection)
         elif key == 'screen_uuid':
+            # While screens are still settling after a DPMS wake, skip the
+            # move — _handle_screens_settled will re-place from the freshly
+            # clamped config once the topology stabilises.
+            if self._screens_settle_timer.isActive():
+                return
             self._move_to_screen_by_uuid(self._config.get('screen_uuid'))
 
     def _move_to_screen_by_uuid(self, target_uuid: str | None):
@@ -459,20 +488,28 @@ class ThermalCanary(QWidget):
 
         self._pending_target_screen = target_screen
         self._pending_target_geo = target_geo
+        gen = self._move_generation
 
         if not self.windowHandle():
-            QTimer.singleShot(50, lambda: self._move_to_screen(idx))
+            QTimer.singleShot(50, lambda: self._retry_move(idx, gen))
             return
 
         self.setMinimumSize(0, 0)
 
         if self.isFullScreen():
             self.showNormal()
-            QTimer.singleShot(400, self._apply_pending_move_if_any)
+            QTimer.singleShot(400, lambda: self._apply_pending_move_if_any(gen))
         else:
             self._apply_pending_move()
 
-    def _apply_pending_move_if_any(self):
+    def _retry_move(self, idx: int, gen: int):
+        if gen != self._move_generation:
+            return
+        self._move_to_screen(idx)
+
+    def _apply_pending_move_if_any(self, gen: int | None = None):
+        if gen is not None and gen != self._move_generation:
+            return
         if self._pending_target_geo is not None:
             self._apply_pending_move()
 
@@ -496,8 +533,11 @@ class ThermalCanary(QWidget):
             return
         wh.setScreen(target_screen)
         self.setGeometry(target_geo)
+        gen = self._move_generation
 
         def _refullscreen():
+            if gen != self._move_generation:
+                return
             if not self.isVisible():
                 return
             self.showFullScreen()
@@ -540,19 +580,24 @@ class ThermalCanary(QWidget):
         # show() first: maps window. 300ms delay: Mutter processes MapNotify
         # fully before ConfigureRequest is sent.
         self.show()
-        QTimer.singleShot(300, lambda: self._move_to_screen_by_uuid(self._config.get('screen_uuid')))
+        gen = self._move_generation
+        def _deferred_move():
+            if gen != self._move_generation:
+                return
+            self._move_to_screen_by_uuid(self._config.get('screen_uuid'))
+        QTimer.singleShot(300, _deferred_move)
         # Hide from GNOME Dash / Alt+Tab without using Qt.WindowType.Tool (which
         # would re-introduce the cross-monitor placement bug). Set SKIP_TASKBAR
         # and SKIP_PAGER via wmctrl after the window is mapped.
         QTimer.singleShot(500, self._apply_skip_taskbar_pager)
 
     def _apply_skip_taskbar_pager(self):
-        import subprocess
+        import subprocess  # nosec B404 - fixed argv, no shell, no user input
         wid = self.winId()
         if not wid:
             return
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B603 B607 - fixed argv, hex(winId) only
                 ['wmctrl', '-i', '-r', hex(int(wid)),
                  '-b', 'add,skip_taskbar,skip_pager'],
                 check=False, capture_output=True, timeout=2)

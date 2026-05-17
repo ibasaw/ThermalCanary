@@ -74,23 +74,29 @@ class Config(QObject):
         if n < 1:
             return
 
-        # UUID wins; index is the auto-migration fallback.
+        # UUID wins; index is the auto-migration fallback. The favorite
+        # (default_screen_*) is READ-ONLY here — only `_save_default_monitor`
+        # in the sidebar writes it. If the favorite monitor is currently
+        # absent (DPMS power-off, cable unplug, mid-wake transient), we
+        # place the session on a temporary screen WITHOUT clobbering the
+        # saved favorite — so the window returns home when it reappears.
         resolved = find_index_by_uuid(screens, self.get('default_screen_uuid'))
-        if resolved is None:
+
+        # One-shot migration for old configs that have an int index but no uuid:
+        # promote the index to a uuid the first (and only) time.
+        if resolved is None and self.get('default_screen_uuid') is None:
             dsi = self.get('default_screen_index')
             if isinstance(dsi, int) and 0 <= dsi < n:
                 resolved = dsi
                 self.set('default_screen_uuid', screen_uuid(screens[resolved]))
+
+        # Temporary fallback: the favorite is unreachable right now. Park on
+        # screen 0 for this session only — do NOT touch the default_* keys.
         if resolved is None:
             resolved = 0
-            self.set('default_screen_uuid', screen_uuid(screens[0]))
-            self.set('default_screen_index', 0)
 
-        # Always open on the default monitor; refresh stored index in case Qt reordered.
         self.set('screen_index', resolved)
         self.set('screen_uuid', screen_uuid(screens[resolved]))
-        if self.get('default_screen_index') != resolved:
-            self.set('default_screen_index', resolved)
 
     def get(self, key):
         return self._data.get(key, DEFAULTS[key])

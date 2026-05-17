@@ -104,25 +104,38 @@ class SettingsSidebar(QWidget):
 
         # Display
         self._section(form, 'Display')
-        self._screens = QApplication.instance().screens()
+        # NEVER cache QScreen pointers. Mutter destroys/recreates QScreen
+        # objects on DPMS power-off/on and cable hotplug — a cached list
+        # leaves us holding wrapped-deleted C++ pointers, which crash the
+        # process on the next attribute access. Always re-fetch live.
         self._screen_combo = QComboBox()
         self._refresh_combo_items()
         # Resolve initial selection by UUID — never trust the integer index alone
         # because Qt can reorder screens between sessions.
-        from thermalcanary.screens import screen_uuid as _suuid, find_index_by_uuid as _find
-        si = _find(self._screens, cfg.get('screen_uuid'))
+        from thermalcanary.screens import find_index_by_uuid as _find
+        screens = self._current_screens()
+        si = _find(screens, cfg.get('screen_uuid'))
         if si is None:
             si = cfg.get('screen_index') or 0
-        self._screen_combo.setCurrentIndex(min(si, len(self._screens) - 1))
+        self._screen_combo.setCurrentIndex(min(si, max(len(screens) - 1, 0)))
         def _on_screen_changed(i):
             from thermalcanary.screens import screen_uuid as _su
             # Set screen_uuid only — _on_config_changed reacts to uuid, not index,
             # to avoid a double-move (index fires first with stale uuid).
-            if 0 <= i < len(self._screens):
+            live = self._current_screens()
+            if 0 <= i < len(live):
                 cfg.set('screen_index', i)
-                cfg.set('screen_uuid', _su(self._screens[i]))
+                cfg.set('screen_uuid', _su(live[i]))
         self._screen_combo.currentIndexChanged.connect(_on_screen_changed)
         form.addRow('Monitor', self._screen_combo)
+
+        # Rebuild the combo whenever Mutter adds/removes/re-ranks screens
+        # so the dropdown reflects the *current* topology, not the snapshot
+        # taken when the sidebar was first built.
+        gui_app = QApplication.instance()
+        gui_app.screenAdded.connect(lambda _s: self._on_screens_changed())
+        gui_app.screenRemoved.connect(lambda _s: self._on_screens_changed())
+        gui_app.primaryScreenChanged.connect(lambda _s: self._on_screens_changed())
 
         self._set_default_btn = QPushButton('Set as default')
         self._set_default_btn.setStyleSheet(
@@ -252,13 +265,31 @@ class SettingsSidebar(QWidget):
         if self._session_panel is not None:
             self._session_panel.push(cpu_t, gpu_t, cpu_u, mem, gpu_vram)
 
+    def _current_screens(self):
+        # Always live — see comment at the construction site. Cached lists
+        # become dangling C++ pointers after DPMS / cable events.
+        return QApplication.instance().screens()
+
+    def _on_screens_changed(self):
+        # Rebuild the combo from the live screen list, preserving selection
+        # by UUID so the user's pick survives Qt screen reordering.
+        from thermalcanary.screens import find_index_by_uuid
+        current_uuid = self._config.get('screen_uuid')
+        self._refresh_combo_items()
+        screens = self._current_screens()
+        idx = find_index_by_uuid(screens, current_uuid)
+        if idx is not None:
+            self._screen_combo.blockSignals(True)
+            self._screen_combo.setCurrentIndex(idx)
+            self._screen_combo.blockSignals(False)
+
     def _refresh_combo_items(self):
         from thermalcanary.screens import screen_uuid as _suuid
         default_uuid = self._config.get('default_screen_uuid')
         current = self._screen_combo.currentIndex()
         self._screen_combo.blockSignals(True)
         self._screen_combo.clear()
-        for i, s in enumerate(self._screens):
+        for i, s in enumerate(self._current_screens()):
             g = s.availableGeometry()
             # Star by UUID — integer index can be stale after Qt screen reorder.
             star = ' ★' if _suuid(s) == default_uuid else ''
@@ -270,9 +301,10 @@ class SettingsSidebar(QWidget):
     def _save_default_monitor(self):
         from thermalcanary.screens import screen_uuid
         idx = self._screen_combo.currentIndex()
-        self._config.set('default_screen_index', idx)
-        if 0 <= idx < len(self._screens):
-            self._config.set('default_screen_uuid', screen_uuid(self._screens[idx]))
+        screens = self._current_screens()
+        if 0 <= idx < len(screens):
+            self._config.set('default_screen_index', idx)
+            self._config.set('default_screen_uuid', screen_uuid(screens[idx]))
         self._refresh_combo_items()
 
     def _premium_dialog(self, title_text: str):
