@@ -78,7 +78,11 @@ def test_combo_pick_uses_live_screens_not_construction_snapshot(qtbot, tmp_confi
 
     # Rebuild combo from the live (swapped) list, then pick index 1 (must
     # differ from the construction-time selection so the changed signal fires).
+    # `_on_screens_changed` debounces via QTimer.singleShot(50, ...) to coalesce
+    # Mutter's 3-5x burst during DPMS recovery — pump the event loop until the
+    # pending flag clears so the rebuild has actually run.
     sb._on_screens_changed()
+    qtbot.waitUntil(lambda: not sb._screen_refresh_pending, timeout=500)
     sb._screen_combo.setCurrentIndex(1)
 
     # The uuid written into config must match the LIVE screen, not whatever
@@ -108,6 +112,7 @@ def test_screens_changed_preserves_selection_by_uuid(qtbot, tmp_config, mocker):
     mocker.patch('thermalcanary.settings.QApplication.instance',
                  return_value=MagicMock(screens=lambda: [s1, s0]))
     sb._on_screens_changed()
+    qtbot.waitUntil(lambda: not sb._screen_refresh_pending, timeout=500)
 
     # External monitor is now at idx 0 — the combo must reflect that, not
     # cling to the stale numeric index.
@@ -153,8 +158,36 @@ def test_save_default_monitor_uses_live_screens(qtbot, tmp_config, mocker):
     mocker.patch('thermalcanary.settings.QApplication.instance',
                  return_value=MagicMock(screens=lambda: [swapped]))
     sb._on_screens_changed()
+    qtbot.waitUntil(lambda: not sb._screen_refresh_pending, timeout=500)
     sb._screen_combo.setCurrentIndex(0)
     sb._save_default_monitor()
 
     assert tmp_config.get('default_screen_uuid') == screen_uuid(swapped)
     assert tmp_config.get('default_screen_index') == 0
+
+
+def test_dpms_burst_is_coalesced_into_single_rebuild(qtbot, tmp_config, mocker):
+    """Mutter fires geometryChanged 3-5x within <100ms during DPMS power-on.
+    The 50ms debounce in `_on_screens_changed` must coalesce that burst into
+    exactly ONE call to `_do_screens_changed` — otherwise the combo flickers
+    and blockSignals races can drop the user's selection."""
+    sb = SettingsSidebar(tmp_config, worker=MagicMock())
+    qtbot.addWidget(sb)
+
+    # Spy AFTER construction so we only count post-construction rebuilds.
+    spy = mocker.spy(sb, '_do_screens_changed')
+
+    # Simulate Mutter's burst: 5 rapid calls in the same event-loop tick.
+    for _ in range(5):
+        sb._on_screens_changed()
+
+    # All 5 calls land before the 50ms timer fires, so only the first sets
+    # the pending flag — the other 4 short-circuit.
+    assert sb._screen_refresh_pending is True
+    assert spy.call_count == 0  # nothing has rebuilt yet
+
+    # Drain the debounce timer.
+    qtbot.waitUntil(lambda: not sb._screen_refresh_pending, timeout=500)
+
+    # Exactly one rebuild from the burst, despite 5 trigger calls.
+    assert spy.call_count == 1
