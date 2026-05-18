@@ -109,6 +109,13 @@ class SettingsSidebar(QWidget):
         # leaves us holding wrapped-deleted C++ pointers, which crash the
         # process on the next attribute access. Always re-fetch live.
         self._screen_combo = QComboBox()
+        # Per-screen signal bookkeeping. Mutter mutates QScreen in place on
+        # DPMS off/on (no screenAdded/Removed fires) — name and geometry go
+        # blank, then restore. We subscribe to QScreen.geometryChanged on
+        # every live screen so the combo redraws when the output recovers.
+        # Never cache QScreen pointers across refreshes — see comment above.
+        self._screen_signal_conns: list = []
+        self._screen_refresh_pending = False
         self._refresh_combo_items()
         # Resolve initial selection by UUID — never trust the integer index alone
         # because Qt can reorder screens between sessions.
@@ -271,6 +278,17 @@ class SettingsSidebar(QWidget):
         return QApplication.instance().screens()
 
     def _on_screens_changed(self):
+        # Debounce: Mutter fires geometryChanged 3-5 times in <100ms during
+        # DPMS recovery. Coalesce into one rebuild to avoid combo flicker
+        # and blockSignals races that drop the user's selection.
+        if self._screen_refresh_pending:
+            return
+        self._screen_refresh_pending = True
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(50, self._do_screens_changed)
+
+    def _do_screens_changed(self):
+        self._screen_refresh_pending = False
         # Rebuild the combo from the live screen list, preserving selection
         # by UUID so the user's pick survives Qt screen reordering.
         from thermalcanary.screens import find_index_by_uuid
@@ -287,14 +305,41 @@ class SettingsSidebar(QWidget):
         from thermalcanary.screens import screen_uuid as _suuid
         default_uuid = self._config.get('default_screen_uuid')
         current = self._screen_combo.currentIndex()
+        # Drop any per-screen geometryChanged subscriptions from the previous
+        # refresh. Mutter may have already destroyed those QScreen C++ objects,
+        # so disconnect() can raise — swallow it.
+        for conn in self._screen_signal_conns:
+            try:
+                screen, signal, slot = conn
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
+        self._screen_signal_conns = []
         self._screen_combo.blockSignals(True)
         self._screen_combo.clear()
         for i, s in enumerate(self._current_screens()):
             g = s.availableGeometry()
-            # Star by UUID — integer index can be stale after Qt screen reorder.
             star = ' ★' if _suuid(s) == default_uuid else ''
-            pos = f'+{g.x()}' if g.x() >= 0 else str(g.x())
-            self._screen_combo.addItem(f'Monitor {i + 1}  {g.width()}×{g.height()} ({s.name()} {pos}){star}')
+            # Synthesize a fallback label during the DPMS-off transient where
+            # Mutter zeroes name() and geometry on the existing QScreen.
+            name = (s.name() or '').strip()
+            if not name:
+                name = (s.manufacturer() or '').strip() + ' ' + (s.model() or '').strip()
+                name = name.strip() or 'unavailable'
+            if g.isEmpty():
+                size_str = '?×?'
+                pos = ''
+            else:
+                size_str = f'{g.width()}×{g.height()}'
+                pos = f' +{g.x()}' if g.x() >= 0 else f' {g.x()}'
+            self._screen_combo.addItem(f'Monitor {i + 1}  {size_str} ({name}{pos}){star}')
+            # Re-subscribe geometry signals on the live screen so the combo
+            # redraws when Mutter restores the output after DPMS power-on.
+            slot = self._on_screens_changed
+            s.geometryChanged.connect(slot)
+            s.virtualGeometryChanged.connect(slot)
+            self._screen_signal_conns.append((s, s.geometryChanged, slot))
+            self._screen_signal_conns.append((s, s.virtualGeometryChanged, slot))
         self._screen_combo.setCurrentIndex(max(current, 0))
         self._screen_combo.blockSignals(False)
 
