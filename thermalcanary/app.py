@@ -612,6 +612,16 @@ def main():
     import fcntl
     import argparse
     from thermalcanary import APP_UUID
+
+    # Auto-setup desktop integration (icon + autostart) on first pipx/pip launch.
+    _desktop = Path.home() / '.local/share/applications/thermalcanary.desktop'
+    if not _desktop.exists():
+        try:
+            from thermalcanary._setup import main as _do_setup
+            _do_setup()
+        except Exception:  # nosec B110
+            pass
+
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument('--app-id', default=APP_UUID)
     ap.parse_known_args()  # consume --app-id so Qt doesn't see it as unknown arg

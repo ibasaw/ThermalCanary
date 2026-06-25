@@ -23,7 +23,7 @@ Smooth 60fps animation, rolling average stabilisation, dynamic heat colors. Auto
 
 **Fully responsive** — gauges scale to any resolution and orientation: ultrawide, portrait, rotated, compact.
 
-**One-command install** — a single `bash install.sh` sets up everything automatically.
+**One-command install** — `pipx install thermalcanary` and you're done.
 
 ### Dedicated monitoring screen setup
 
@@ -76,55 +76,58 @@ Supported package managers: **apt** (Debian/Ubuntu), **dnf** (Fedora/RHEL), **pa
 
 ## Install
 
-**Via pipx** (any distro, recommended):
+### Prerequisites
+
+Install these system packages once before the first run (needed by PyQt6 on X11):
+
+| Distro | Command |
+|--------|---------|
+| Ubuntu / Debian | `sudo apt install lm-sensors libxcb-cursor0 libxcb-xinerama0` |
+| Fedora / RHEL | `sudo dnf install lm_sensors xcb-util-cursor` |
+| Arch | `sudo pacman -S lm_sensors xcb-util-cursor` |
+| openSUSE | `sudo zypper install lm-sensors xcb-util-cursor` |
+
+**NVIDIA users**: GPU gauges require the proprietary NVIDIA driver. Without it the three GPU gauges show `—` but everything else works fine.
+
+### Install
+
 ```bash
 pipx install thermalcanary
 thermalcanary
 ```
 
-**Full install** (sets up autostart, desktop icon, system dependencies):
-```bash
-git clone https://github.com/ibasaw/thermalcanary.git
-cd thermalcanary
-bash install.sh
-```
-
 **Thermal Canary runs entirely as your user — no root needed at runtime.**
 
-The installer separates system-package installation from everything else:
+On first launch, it automatically installs the app grid icon and sets up autostart on login (8-second delay to let the desktop session initialize). No extra commands needed.
 
-- `bash install.sh` — checks system packages and prints any missing ones with the exact `sudo` command to install them, then proceeds with the rootless steps (venv, pip, desktop files, launch)
-- `bash install.sh --install-deps` — same, but also invokes `sudo` automatically to install missing packages
+### Migrating from a previous `bash install.sh` install
 
-The installer will:
-1. Check for NVIDIA driver — prints distro-specific install instructions if missing (GPU gauges need it; CPU/RAM gauges work without)
-2. Check system packages — prints missing ones or installs them if `--install-deps` was passed
-3. Copy the app package and icon to `~/.local/share/thermalcanary/`
-4. Create a Python venv and install all Python dependencies (PyQt6, psutil, nvidia-ml-py, PyYAML)
-5. Verify all dependencies are working
-6. Copy the default config to `~/.config/thermalcanary/config.yaml` (only on first install — never overwrites existing config)
-7. Register the app in `~/.local/share/applications/` for taskbar icon support
-8. Register an autostart entry so the app launches 8 seconds after login
-9. Kill any running instance and launch the app immediately
+```bash
+# Remove old install.sh files
+rm -rf ~/.local/share/thermalcanary
+rm -f ~/.config/autostart/thermalcanary.desktop
+rm -f ~/.local/share/applications/thermalcanary.desktop
 
-The clone folder is only needed to run the installer. You can delete it afterwards.
+# Install fresh
+pipx install thermalcanary
+thermalcanary
+```
 
 ## Installed file layout
 
 | Path | What |
 |------|------|
-| `~/.local/share/thermalcanary/thermalcanary/` | App package |
-| `~/.local/share/thermalcanary/assets/` | App icon |
-| `~/.local/share/thermalcanary/venv/` | Python virtual environment |
-| `~/.local/share/icons/hicolor/*/apps/thermalcanary.png` | System icon (taskbar) |
-| `~/.local/share/applications/thermalcanary.desktop` | App entry (taskbar icon) |
+| `~/.local/share/pipx/venvs/thermalcanary/` | pipx-managed venv |
+| `~/.local/bin/thermalcanary` | Entry point |
+| `~/.local/share/icons/hicolor/256x256/apps/thermalcanary.png` | App icon |
+| `~/.local/share/applications/thermalcanary.desktop` | App grid entry |
 | `~/.config/thermalcanary/config.yaml` | User configuration (auto-saved by the app) |
-| `~/.config/autostart/thermalcanary.desktop` | Autostart on login |
+| `~/.config/autostart/thermalcanary.desktop` | Autostart on login (8s delay) |
 
 ## Launch manually
 
 ```bash
-cd ~/.local/share/thermalcanary && venv/bin/python3 -m thermalcanary
+thermalcanary
 ```
 
 ## Settings sidebar
@@ -167,10 +170,9 @@ The autostart entry inherits `$DISPLAY` from the login session, falling back to 
 ## Uninstall
 
 ```bash
-bash uninstall.sh
+thermalcanary-setup --uninstall   # removes icon, desktop entry, autostart
+pipx uninstall thermalcanary
 ```
-
-Removes the app, venv, icon, config, and all desktop entries after confirmation.
 
 ## Architecture
 
