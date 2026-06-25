@@ -614,13 +614,7 @@ def main():
     import os
     from thermalcanary import APP_UUID
 
-    # Daemonize: fork so the terminal is released immediately.
-    # Parent exits; child continues. Works whether launched from a terminal or autostart.
-    if os.fork() > 0:
-        os._exit(0)  # hard exit — bypasses pipx wrapper's exception handlers
-    os.setsid()  # detach from controlling terminal so the shell isn't blocked
-
-    # Auto-setup desktop integration (icon + autostart) on first pipx/pip launch.
+    # First-run setup runs in the parent so the user sees the output on their terminal.
     _desktop = Path.home() / '.local/share/applications/thermalcanary.desktop'
     if not _desktop.exists():
         try:
@@ -628,6 +622,21 @@ def main():
             _do_setup()
         except Exception:  # nosec B110
             pass
+
+    # Daemonize: fork so the terminal is released immediately.
+    # --foreground skips the fork (useful for debugging).
+    if '--foreground' not in sys.argv:
+        if os.fork() > 0:
+            os._exit(0)  # parent exits hard — bash waitpid() returns, prompt reappears
+        os.setsid()  # child: new session, detach from controlling terminal
+        # Redirect stdin/stdout/stderr to /dev/null so the TTY is fully released.
+        _devnull_r = os.open(os.devnull, os.O_RDONLY)
+        _devnull_w = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(_devnull_r, 0)
+        os.dup2(_devnull_w, 1)
+        os.dup2(_devnull_w, 2)
+        os.close(_devnull_r)
+        os.close(_devnull_w)
 
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument('--app-id', default=APP_UUID)
