@@ -31,6 +31,7 @@ dev = [
 [tool.pytest.ini_options]
 qt_api = "pyqt6"
 addopts = "--cov=thermalcanary --cov-report=term-missing"
+norecursedirs = ["mutants", ".venv", "node_modules", "__pycache__", ".git"]
 
 [tool.coverage.run]
 omit = ["thermalcanary/__main__.py"]
