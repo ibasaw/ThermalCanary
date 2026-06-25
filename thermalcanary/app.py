@@ -617,8 +617,8 @@ def main():
     # Daemonize: fork so the terminal is released immediately.
     # Parent exits; child continues. Works whether launched from a terminal or autostart.
     if os.fork() > 0:
-        sys.exit(0)
-    os.setsid()  # detach from the controlling terminal session
+        os._exit(0)  # hard exit — bypasses pipx wrapper's exception handlers
+    os.setsid()  # detach from controlling terminal so the shell isn't blocked
 
     # Auto-setup desktop integration (icon + autostart) on first pipx/pip launch.
     _desktop = Path.home() / '.local/share/applications/thermalcanary.desktop'
