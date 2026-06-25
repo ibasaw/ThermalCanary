@@ -1,4 +1,4 @@
-__version__ = '1.1.6'
+__version__ = '1.1.7'
 
 # Fixed app UUID — passed as --app-id=<UUID> on every launch.
 # Used to identify and kill running instances via `pgrep -f <APP_UUID>` — zero false positives.

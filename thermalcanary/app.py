@@ -611,7 +611,14 @@ _lock_file = None  # module-level ref keeps the fd alive so the lock is never re
 def main():
     import fcntl
     import argparse
+    import os
     from thermalcanary import APP_UUID
+
+    # Daemonize: fork so the terminal is released immediately.
+    # Parent exits; child continues. Works whether launched from a terminal or autostart.
+    if os.fork() > 0:
+        sys.exit(0)
+    os.setsid()  # detach from the controlling terminal session
 
     # Auto-setup desktop integration (icon + autostart) on first pipx/pip launch.
     _desktop = Path.home() / '.local/share/applications/thermalcanary.desktop'
