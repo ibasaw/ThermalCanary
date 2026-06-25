@@ -16,3 +16,4 @@ build/
 mutants/
 pyproject.toml.mutmut_tmp
 .mutmut-cache
+/todos.md

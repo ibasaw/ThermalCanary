@@ -1,0 +1,26 @@
+# Generated from PKGBUILD — regenerate with: makepkg --printsrcinfo > .SRCINFO
+
+pkgbase = thermalcanary-git
+	pkgdesc = GPU and CPU thermal gauges for Linux — six circular arc gauges on a dedicated monitor
+	pkgver = r38.g7da8ee6
+	pkgrel = 1
+	url = https://github.com/ibasaw/thermalcanary
+	arch = any
+	license = MIT
+	makedepends = git
+	makedepends = python-build
+	makedepends = python-installer
+	makedepends = python-hatchling
+	makedepends = python-wheel
+	depends = python
+	depends = python-pyqt6
+	depends = python-psutil
+	depends = python-yaml
+	optdepends = python-nvidia-ml-py: NVIDIA GPU temperature, fan, and VRAM support
+	optdepends = lm_sensors: CPU temperature reading (coretemp / k10temp are auto-loaded)
+	provides = thermalcanary
+	conflicts = thermalcanary
+	source = thermalcanary-git::git+https://github.com/ibasaw/thermalcanary.git
+	sha256sums = SKIP
+
+pkgname = thermalcanary-git

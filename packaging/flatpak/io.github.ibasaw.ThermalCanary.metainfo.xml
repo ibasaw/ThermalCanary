@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ibasaw.ThermalCanary</id>
+
+  <name>Thermal Canary</name>
+  <summary>GPU and CPU thermal gauges for Linux gamers</summary>
+
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+
+  <description>
+    <p>
+      Thermal Canary is a fullscreen hardware monitor for Linux that displays
+      six circular arc gauges in real time: CPU temperature, CPU usage, and RAM
+      on the top row; GPU temperature, GPU fan speed, and GPU VRAM on the
+      bottom row.
+    </p>
+    <p>
+      Designed for gamers and power users who want a clean, always-visible
+      thermal dashboard on a second monitor. Features include:
+    </p>
+    <ul>
+      <li>Smooth 60 fps animated arc gauges with heat-map color gradient</li>
+      <li>NVIDIA (pynvml), AMD (amdgpu sysfs), and Intel GPU support</li>
+      <li>Per-monitor placement — pin it to any connected screen</li>
+      <li>Slide-in settings sidebar (Ctrl+,) for live configuration</li>
+      <li>Warn / critical thresholds with solid heat coloring</li>
+      <li>System tray icon for quick show / hide</li>
+      <li>Configurable poll rate, smoothing, colors, and GPU backend</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.ibasaw.ThermalCanary.desktop</launchable>
+
+  <url type="homepage">https://github.com/ibasaw/thermalcanary</url>
+  <url type="bugtracker">https://github.com/ibasaw/thermalcanary/issues</url>
+
+  <developer id="io.github.ibasaw">
+    <name>ibasaw</name>
+  </developer>
+
+  <screenshots>
+    <!-- Replace with hosted screenshot URLs before Flathub submission -->
+    <screenshot type="default">
+      <caption>Six thermal gauges — CPU and GPU monitoring at a glance</caption>
+      <image>https://raw.githubusercontent.com/ibasaw/thermalcanary/main/screenshot.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Slide-in settings sidebar for live configuration</caption>
+      <image>https://raw.githubusercontent.com/ibasaw/thermalcanary/main/screenshot-settings.png</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="1.1.0" date="2026-06-25">
+      <description>
+        <p>Multi-monitor reliability improvements and DPMS resilience.</p>
+      </description>
+    </release>
+  </releases>
+
+  <content_rating type="oars-1.1" />
+
+  <categories>
+    <category>Utility</category>
+    <category>System</category>
+  </categories>
+
+  <keywords>
+    <keyword>temperature</keyword>
+    <keyword>thermal</keyword>
+    <keyword>gpu</keyword>
+    <keyword>cpu</keyword>
+    <keyword>ram</keyword>
+    <keyword>gauge</keyword>
+    <keyword>hardware</keyword>
+    <keyword>monitor</keyword>
+    <keyword>sensor</keyword>
+    <keyword>gaming</keyword>
+  </keywords>
+
+  <recommends>
+    <display_length compare="ge">800</display_length>
+  </recommends>
+
+  <requires>
+    <display_length compare="ge">640</display_length>
+  </requires>
+</component>

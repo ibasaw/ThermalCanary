@@ -1,11 +1,12 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Thermal Canary" width="600">
+  <img src="https://raw.githubusercontent.com/ibasaw/thermalcanary/main/assets/logo.png" alt="Thermal Canary" width="600">
 </p>
 
 <p align="center">
   <a href="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml"><img src="https://github.com/ibasaw/thermalcanary/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ibasaw/thermalcanary/main/coverage-badge.json&cacheSeconds=300" alt="Coverage">
   <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ibasaw/thermalcanary/main/mutation-badge.json&cacheSeconds=300" alt="Mutation score">
+  <a href="https://pypi.org/project/thermalcanary/"><img src="https://img.shields.io/pypi/v/thermalcanary.svg" alt="PyPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/platform-Linux-lightgrey.svg" alt="Platform: Linux">
@@ -28,9 +29,9 @@ Smooth 60fps animation, rolling average stabilisation, dynamic heat colors. Auto
 
 Plug in a secondary screen (a stretched panel, a small IPS monitor, anything), select it in the Settings sidebar under **Monitor**, and click **Set as default**. Thermal Canary will always open on that screen at login — no configuration files to edit.  
 
-![Thermal Canary preview](screenshot.png)
+![Thermal Canary preview](https://raw.githubusercontent.com/ibasaw/thermalcanary/main/screenshot.png)
 
-![Thermal Canary with settings sidebar open](screenshot-settings.png)
+![Thermal Canary with settings sidebar open](https://raw.githubusercontent.com/ibasaw/thermalcanary/main/screenshot-settings.png)
 
 ## Gauges
 
@@ -75,6 +76,13 @@ Supported package managers: **apt** (Debian/Ubuntu), **dnf** (Fedora/RHEL), **pa
 
 ## Install
 
+**Via pipx** (any distro, recommended):
+```bash
+pipx install thermalcanary
+thermalcanary
+```
+
+**Full install** (sets up autostart, desktop icon, system dependencies):
 ```bash
 git clone https://github.com/ibasaw/thermalcanary.git
 cd thermalcanary

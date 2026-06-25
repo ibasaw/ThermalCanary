@@ -1,0 +1,75 @@
+# Maintainer: Sébastien Vérité <sebastien.verite@gmail.com>
+pkgname=thermalcanary-git
+pkgver=r0.g0000000
+pkgrel=1
+pkgdesc='GPU and CPU thermal gauges for Linux — six circular arc gauges on a dedicated monitor'
+arch=('any')
+url='https://github.com/ibasaw/thermalcanary'
+license=('MIT')
+depends=(
+  'python'
+  'python-pyqt6'
+  'python-psutil'
+  'python-yaml'
+)
+optdepends=(
+  'python-nvidia-ml-py: NVIDIA GPU temperature, fan, and VRAM support'
+  'lm_sensors: CPU temperature reading (coretemp / k10temp are auto-loaded)'
+)
+makedepends=(
+  'git'
+  'python-build'
+  'python-installer'
+  'python-hatchling'
+  'python-wheel'
+)
+provides=('thermalcanary')
+conflicts=('thermalcanary')
+source=("$pkgname::git+https://github.com/ibasaw/thermalcanary.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$pkgname"
+  printf "r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$pkgname"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$pkgname"
+
+  # Install the wheel (creates /usr/bin/thermalcanary via [project.scripts])
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  # Icon (hicolor 256x256 — install.sh resizes; use source PNG as-is)
+  install -Dm644 assets/icon.png \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/thermalcanary.png"
+
+  # Desktop entry
+  install -Dm644 /dev/stdin \
+    "$pkgdir/usr/share/applications/thermalcanary.desktop" << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Thermal Canary
+GenericName=Hardware Monitor
+Comment=GPU and CPU thermal gauges for Linux gamers
+Icon=thermalcanary
+Exec=thermalcanary
+Terminal=false
+Categories=Utility;System;Monitor;
+Keywords=temperature;thermal;gpu;cpu;ram;gauge;hardware;monitor;sensor;
+StartupWMClass=thermalcanary
+StartupNotify=false
+EOF
+
+  # Default config (copied to ~/.config/thermalcanary/ on first run)
+  install -Dm644 config.example.yaml \
+    "$pkgdir/usr/share/thermalcanary/config.example.yaml"
+
+  # License
+  install -Dm644 LICENSE \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

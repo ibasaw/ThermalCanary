@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Thermal Canary
+GenericName=Hardware Monitor
+Comment=GPU and CPU thermal gauges for Linux gamers
+Icon=io.github.ibasaw.ThermalCanary
+Exec=thermalcanary
+Terminal=false
+Categories=Utility;System;Monitor;
+Keywords=temperature;thermal;gpu;cpu;ram;gauge;hardware;monitor;sensor;
+StartupWMClass=thermalcanary
+StartupNotify=false

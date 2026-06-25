@@ -1,4 +1,4 @@
-__version__ = '1.1.0'
+__version__ = '1.1.3'
 
 # Fixed app UUID — passed as --app-id=<UUID> on every launch.
 # Used by install.sh / uninstall.sh to find and kill running instances
