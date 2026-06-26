@@ -8,6 +8,7 @@ Creates:
 """
 
 import importlib.resources
+import os
 import shutil
 import subprocess  # nosec B404
 import sys
@@ -81,10 +82,15 @@ def _uninstall() -> None:
         home / ".local/share/applications/thermalcanary.desktop",
         home / ".config/autostart/thermalcanary.desktop",
         home / ".local/share/icons/hicolor/256x256/apps/thermalcanary.png",
+        Path(f"/run/user/{os.getuid()}/thermalcanary.lock"),
     ]:
         if p.exists():
             p.unlink()
             print(f"removed {p}")
+    config_dir = home / ".config/thermalcanary"
+    if config_dir.exists():
+        shutil.rmtree(config_dir)
+        print(f"removed {config_dir}")
     subprocess.run(["update-desktop-database",  # nosec B603 B607
                     str(home / ".local/share/applications")], capture_output=True)
     print("Done.")

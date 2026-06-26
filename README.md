@@ -170,8 +170,8 @@ The autostart entry inherits `$DISPLAY` from the login session, falling back to 
 ## Uninstall
 
 ```bash
-thermalcanary-setup --uninstall   # removes icon, desktop entry, autostart
-pipx uninstall thermalcanary
+thermalcanary-setup --uninstall   # removes icon, desktop entry, autostart, config dir, lock file
+pipx uninstall thermalcanary      # removes venv and entry point
 ```
 
 ## Architecture
