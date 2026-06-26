@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QLabel, QSpinBox, QComboBox, QPushButton,
                               QFrame, QColorDialog, QSizePolicy,
-                              QApplication, QStackedWidget, QTabWidget)
+                              QApplication, QStackedWidget, QTabWidget,
+                              QScrollArea)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from thermalcanary.config import Config, DEFAULTS
@@ -56,7 +57,8 @@ class SettingsSidebar(QWidget):
             QWidget { background: #1a1630; color: #ccc; font-family: Inter; }
             QSpinBox, QComboBox {
                 background: #252040; border: 1px solid #443e70;
-                border-radius: 4px; padding: 4px 8px; color: #eee; }
+                border-radius: 4px; padding: 4px 8px; color: #eee;
+                min-height: 24px; }
             QComboBox::drop-down { border: none; width: 20px; }
             QComboBox::down-arrow { width: 10px; height: 10px; }
             QComboBox QAbstractItemView {
@@ -83,7 +85,29 @@ class SettingsSidebar(QWidget):
         root_layout.addWidget(self._stack)
 
         settings_page = QWidget()
-        outer = QVBoxLayout(settings_page)
+        # Short screens (e.g. a 1920x480 panel) can't fit Display+Sampling+Colors
+        # at once. Without a scroll area the layout compresses every row below its
+        # minimum and clips the combo/spinbox text. Make the content scroll instead.
+        page_layout = QVBoxLayout(settings_page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(
+            'QScrollArea { background: transparent; border: none; }'
+            'QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }'
+            'QScrollBar::handle:vertical { background: #443e70; '
+            'border-radius: 4px; min-height: 24px; }'
+            'QScrollBar::handle:vertical:hover { background: #7c6ef5; }'
+            'QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }'
+            'QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical '
+            '{ background: transparent; }')
+        page_layout.addWidget(scroll)
+        content = QWidget()
+        scroll.setWidget(content)
+        outer = QVBoxLayout(content)
         outer.setContentsMargins(16, 48, 16, 16)
         outer.setSpacing(6)
 
